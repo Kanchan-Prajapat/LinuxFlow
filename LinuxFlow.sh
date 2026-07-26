@@ -7,6 +7,8 @@
 # Load Common Library
 source ./modules/common.sh
 source ./modules/user.sh
+source ./modules/group.sh
+source ./utils/logger.sh
 ############################################
 # Application Started
 ############################################
@@ -54,7 +56,7 @@ user_menu
 2)
 
 echo
-echo "Group Module Coming Soon"
+group_menu
 pause
 ;;
 
