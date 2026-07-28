@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ############################################
-# User Management Module
+# Group Management Module
 ############################################
 
 

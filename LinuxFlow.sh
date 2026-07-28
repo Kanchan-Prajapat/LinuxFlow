@@ -9,6 +9,7 @@ source ./modules/common.sh
 source ./modules/user.sh
 source ./modules/group.sh
 source ./utils/logger.sh
+source ./modules/backup.sh
 ############################################
 # Application Started
 ############################################
@@ -51,10 +52,10 @@ case $choice in
 
 echo
 user_menu
+pause
 ;;
 
 2)
-
 echo
 group_menu
 pause
@@ -91,7 +92,7 @@ pause
 7)
 
 echo
-echo "Backup Module Coming Soon"
+backup_menu
 pause
 ;;
 
