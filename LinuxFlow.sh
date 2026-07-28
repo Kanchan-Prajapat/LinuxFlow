@@ -10,6 +10,7 @@ source ./modules/user.sh
 source ./modules/group.sh
 source ./utils/logger.sh
 source ./modules/backup.sh
+source ./modules/permission.sh
 ############################################
 # Application Started
 ############################################
@@ -52,20 +53,17 @@ case $choice in
 
 echo
 user_menu
-pause
 ;;
 
 2)
 echo
 group_menu
-pause
 ;;
 
 3)
 
 echo
-echo "Permission Module Coming Soon"
-pause
+permission_menu
 ;;
 
 4)
@@ -93,7 +91,6 @@ pause
 
 echo
 backup_menu
-pause
 ;;
 
 8)

@@ -307,7 +307,7 @@ backup_info() {
 
 ##################################################
 # Function : backup_menu
-# Purpose  : Displays Group Management Menu
+# Purpose  : Displays Backup Management Menu
 ##################################################
 
 backup_menu() {
