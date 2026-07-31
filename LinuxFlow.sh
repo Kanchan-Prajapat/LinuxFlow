@@ -11,6 +11,8 @@ source ./modules/group.sh
 source ./utils/logger.sh
 source ./modules/backup.sh
 source ./modules/permission.sh
+source ./modules/process.sh
+source ./modules/service.sh
 ############################################
 # Application Started
 ############################################
@@ -31,15 +33,16 @@ header
 echo "1. User Management"
 echo "2. Group Management"
 echo "3. Permission Manager"
-echo "4. ACL Manager"
-echo "5. LVM Manager"
-echo "6. Swap Manager"
-echo "7. Backup Manager"
-echo "8. Service Manager"
-echo "9. Firewall Manager"
-echo "10. SSH Manager"
-echo "11. Monitoring Dashboard"
-echo "12. Report Generator"
+echo "4. Backup Manager"
+echo "5. Process Manager"
+echo "6. Service Manager"
+echo "7. ACL Manager"
+echo "8. LVM Manager"
+echo "9. Swap Manager"
+echo "10. Firewall Manager"
+echo "11. SSH Manager"
+echo "12. Monitoring Dashboard"
+echo "13. Report Generator"
 echo
 echo "0. Exit"
 
@@ -69,59 +72,68 @@ permission_menu
 4)
 
 echo
-echo "ACL Module Coming Soon"
-pause
+backup_menu
 ;;
 
 5)
 
 echo
-echo "LVM Module Coming Soon"
+process_menu
 pause
 ;;
 
 6)
 
 echo
-echo "Swap Module Coming Soon"
+service_menu
 pause
 ;;
 
 7)
 
 echo
-backup_menu
+echo "ACL Module Coming Soon"
+pause
 ;;
 
 8)
 
 echo
-echo "Service Module Coming Soon"
+echo "LVM Module Coming Soon"
 pause
 ;;
 
 9)
 
 echo
-echo "Firewall Module Coming Soon"
+echo "Swap Module Coming Soon"
 pause
 ;;
+
+
 
 10)
 
 echo
-echo "SSH Module Coming Soon"
+echo "Firewall Module Coming Soon"
 pause
 ;;
 
 11)
 
 echo
-echo "Monitoring Module Coming Soon"
+echo "SSH Module Coming Soon"
 pause
 ;;
 
 12)
+
+echo
+echo "Monitoring Module Coming Soon"
+pause
+;;
+
+13)
 
 echo
 echo "Reports Module Coming Soon"
