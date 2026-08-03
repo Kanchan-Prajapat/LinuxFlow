@@ -512,6 +512,398 @@ lvm_information() {
 
 
 
+##################################################
+# Function : create_filesystem
+# Purpose  : Create XFS filesystem on logical volume
+##################################################
+
+create_filesystem() {
+
+    header
+
+    echo "========== Create Filesystem =========="
+    echo
+
+    # Check required utility
+    if ! command -v mkfs.xfs &>/dev/null; then
+        error "XFS filesystem utility is not installed."
+        pause
+        return
+    fi
+
+    echo "Available Logical Volumes:"
+    echo "----------------------------------------"
+    lvs -o lv_name,vg_name,lv_size
+    echo
+
+    read -p "Enter volume group name: " vgname
+
+    # Check volume group
+    if ! vgs "$vgname" &>/dev/null; then
+        error "Volume group '$vgname' does not exist."
+        pause
+        return
+    fi
+
+    echo
+    read -p "Enter logical volume name: " lvname
+
+    # Check logical volume
+    if ! lvs "$vgname/$lvname" &>/dev/null; then
+        error "Logical volume '$lvname' does not exist in '$vgname'."
+        pause
+        return
+    fi
+
+    lv_path="/dev/$vgname/$lvname"
+
+    # Check whether LV is mounted
+    if findmnt -rn -S "$lv_path" &>/dev/null; then
+        error "Logical volume '$lv_path' is currently mounted."
+        pause
+        return
+    fi
+
+    # Check existing filesystem
+    filesystem=$(blkid -s TYPE -o value "$lv_path" 2>/dev/null)
+
+    if [ -n "$filesystem" ]; then
+        error "Logical volume already contains '$filesystem' filesystem."
+        warning "LinuxFlow will not overwrite an existing filesystem."
+        pause
+        return
+    fi
+
+    echo
+    echo "Logical Volume : $lv_path"
+    echo "Filesystem     : XFS"
+    echo
+
+    warning "Creating a filesystem writes filesystem metadata to the logical volume."
+    echo
+
+    read -p "Create XFS filesystem on '$lv_path'? (Y/N): " confirm
+
+    case "$confirm" in
+
+        Y|y)
+
+            if mkfs.xfs "$lv_path"; then
+                success "XFS filesystem created successfully."
+            else
+                error "Failed to create filesystem."
+            fi
+            ;;
+
+        N|n)
+
+            warning "Operation cancelled."
+            ;;
+
+        *)
+
+            error "Invalid choice."
+            ;;
+
+    esac
+
+    pause
+}
+
+
+
+##################################################
+# Function : mount_logical_volume
+# Purpose  : Mount logical volume to a directory
+##################################################
+
+mount_logical_volume() {
+
+    header
+
+    echo "========== Mount Logical Volume =========="
+    echo
+
+    echo "Available Logical Volumes:"
+    echo "----------------------------------------"
+    lvs -o lv_name,vg_name,lv_size
+    echo
+
+    read -p "Enter volume group name: " vgname
+
+    if ! vgs "$vgname" &>/dev/null; then
+        error "Volume group '$vgname' does not exist."
+        pause
+        return
+    fi
+
+    echo
+    read -p "Enter logical volume name: " lvname
+
+    if ! lvs "$vgname/$lvname" &>/dev/null; then
+        error "Logical volume '$lvname' does not exist in '$vgname'."
+        pause
+        return
+    fi
+
+    lv_path="/dev/$vgname/$lvname"
+
+    # Check filesystem
+    filesystem=$(blkid -s TYPE -o value "$lv_path" 2>/dev/null)
+
+    if [ -z "$filesystem" ]; then
+        error "No filesystem found on '$lv_path'."
+        warning "Create a filesystem before mounting."
+        pause
+        return
+    fi
+
+    # Check whether LV is already mounted
+    current_mount=$(findmnt -rn -S "$lv_path" -o TARGET 2>/dev/null)
+
+    if [ -n "$current_mount" ]; then
+        warning "Logical volume is already mounted at '$current_mount'."
+        pause
+        return
+    fi
+
+    echo
+    read -p "Enter mount point (e.g. /mnt/linuxflow): " mount_point
+
+    if [ -z "$mount_point" ]; then
+        error "Mount point cannot be empty."
+        pause
+        return
+    fi
+
+    # Require absolute path
+    if [[ "$mount_point" != /* ]]; then
+        error "Mount point must be an absolute path."
+        pause
+        return
+    fi
+
+    # Check if something is already mounted there
+    if findmnt -rn -T "$mount_point" 2>/dev/null |
+       awk -v target="$mount_point" '$1 == target {found=1} END {exit !found}'; then
+
+        error "Something is already mounted at '$mount_point'."
+        pause
+        return
+    fi
+
+    echo
+    echo "Logical Volume : $lv_path"
+    echo "Filesystem     : $filesystem"
+    echo "Mount Point    : $mount_point"
+    echo
+
+    read -p "Mount logical volume? (Y/N): " confirm
+
+    case "$confirm" in
+
+        Y|y)
+
+            if ! mkdir -p "$mount_point"; then
+                error "Failed to create mount point."
+                pause
+                return
+            fi
+
+            if mount "$lv_path" "$mount_point"; then
+                success "Logical volume mounted successfully."
+
+                echo
+                echo "Mount Information:"
+                echo "----------------------------------------"
+                findmnt "$mount_point"
+            else
+                error "Failed to mount logical volume."
+            fi
+            ;;
+
+        N|n)
+
+            warning "Operation cancelled."
+            ;;
+
+        *)
+
+            error "Invalid choice."
+            ;;
+
+    esac
+
+    pause
+}
+
+
+##################################################
+# Function : configure_persistent_mount
+# Purpose  : Configure persistent mount using fstab
+##################################################
+
+configure_persistent_mount() {
+
+    header
+
+    echo "========== Configure Persistent Mount =========="
+    echo
+
+    echo "Available Logical Volumes:"
+    echo "----------------------------------------"
+    lvs -o lv_name,vg_name,lv_size
+    echo
+
+    read -p "Enter volume group name: " vgname
+
+    if ! vgs "$vgname" &>/dev/null; then
+        error "Volume group '$vgname' does not exist."
+        pause
+        return
+    fi
+
+    echo
+    read -p "Enter logical volume name: " lvname
+
+    if ! lvs "$vgname/$lvname" &>/dev/null; then
+        error "Logical volume '$lvname' does not exist in '$vgname'."
+        pause
+        return
+    fi
+
+    lv_path="/dev/$vgname/$lvname"
+
+    # Check filesystem
+    filesystem=$(blkid -s TYPE -o value "$lv_path" 2>/dev/null)
+
+    if [ -z "$filesystem" ]; then
+        error "No filesystem found on '$lv_path'."
+        warning "Create a filesystem first."
+        pause
+        return
+    fi
+
+    # Get filesystem UUID
+    uuid=$(blkid -s UUID -o value "$lv_path" 2>/dev/null)
+
+    if [ -z "$uuid" ]; then
+        error "Unable to determine filesystem UUID."
+        pause
+        return
+    fi
+
+    echo
+    read -p "Enter mount point (e.g. /mnt/linuxflow): " mount_point
+
+    if [ -z "$mount_point" ]; then
+        error "Mount point cannot be empty."
+        pause
+        return
+    fi
+
+    if [[ "$mount_point" != /* ]]; then
+        error "Mount point must be an absolute path."
+        pause
+        return
+    fi
+
+    # Prevent duplicate UUID entry
+    if grep -Eq "^[[:space:]]*UUID=${uuid}[[:space:]]" /etc/fstab; then
+        warning "This logical volume already has an /etc/fstab entry."
+        pause
+        return
+    fi
+
+    # Prevent duplicate mount point
+    if awk '!/^[[:space:]]*#/ && NF >= 2 {print $2}' /etc/fstab |
+       grep -Fxq "$mount_point"; then
+
+        error "Mount point '$mount_point' already exists in /etc/fstab."
+        pause
+        return
+    fi
+
+    echo
+    echo "Logical Volume : $lv_path"
+    echo "UUID           : $uuid"
+    echo "Filesystem     : $filesystem"
+    echo "Mount Point    : $mount_point"
+    echo
+
+    warning "LinuxFlow will modify /etc/fstab."
+    echo
+
+    read -p "Configure persistent mount? (Y/N): " confirm
+
+    case "$confirm" in
+
+        Y|y)
+
+            # Create mount point
+            if ! mkdir -p "$mount_point"; then
+                error "Failed to create mount point."
+                pause
+                return
+            fi
+
+            # Backup fstab
+            backup_file="/etc/fstab.linuxflow.$(date +%Y%m%d_%H%M%S).bak"
+
+            if ! cp -p /etc/fstab "$backup_file"; then
+                error "Failed to backup /etc/fstab."
+                pause
+                return
+            fi
+
+            success "fstab backup created: $backup_file"
+
+            # Add persistent mount entry
+            echo "UUID=$uuid $mount_point $filesystem defaults 0 0" >> /etc/fstab
+
+            # Validate fstab
+            if mount -a; then
+
+                success "Persistent mount configured successfully."
+
+                echo
+                echo "fstab Entry:"
+                echo "----------------------------------------"
+                echo "UUID=$uuid $mount_point $filesystem defaults 0 0"
+
+                echo
+                echo "Mount Information:"
+                echo "----------------------------------------"
+                findmnt "$mount_point"
+
+            else
+
+                error "fstab validation failed."
+                warning "Restoring previous /etc/fstab..."
+
+                cp -p "$backup_file" /etc/fstab
+
+                success "Previous /etc/fstab restored."
+
+                pause
+                return
+            fi
+            ;;
+
+        N|n)
+
+            warning "Operation cancelled."
+            ;;
+
+        *)
+
+            error "Invalid choice."
+            ;;
+
+    esac
+
+    pause
+}
 
 
 ##################################################
@@ -534,7 +926,10 @@ lvm_menu() {
         echo "4. Create Volume Group"
         echo "5. List Logical Volumes"
         echo "6. Create Logical Volume"
-        echo "7. LVM Information"
+        echo "7. Create Filesystem"
+        echo "8. Mount Logical Volume"
+        echo "9. Configure Persistent Mount"
+        echo "10. LVM Information"
         echo
         echo "0. Back"
         echo
@@ -568,6 +963,18 @@ lvm_menu() {
                 ;;
 
             7)
+                create_filesystem
+                ;;
+
+            8)
+                mount_logical_volume
+                ;;
+
+            9)
+                configure_persistent_mount
+                ;;
+
+            10)
                 lvm_information
                 ;;
 
