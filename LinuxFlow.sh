@@ -14,6 +14,8 @@ source ./modules/permission.sh
 source ./modules/process.sh
 source ./modules/service.sh
 source ./modules/firewall.sh
+source ./modules/acl.sh
+source ./modules/lvm.sh
 ############################################
 # Application Started
 ############################################
@@ -97,15 +99,13 @@ firewall_menu
 8)
 
 echo
-echo "LVM Module Coming Soon"
-pause
+acl_menu
 ;;
 
 9)
 
 echo
-echo "Swap Module Coming Soon"
-pause
+lvm_menu
 ;;
 
 
@@ -113,7 +113,7 @@ pause
 10)
 
 echo
-echo "ACL Module Coming Soon"
+echo "Swap Module Coming Soon"
 pause
 ;;
 
