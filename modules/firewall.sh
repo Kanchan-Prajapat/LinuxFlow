@@ -558,7 +558,7 @@ firewall_menu() {
         echo "4. Remove Port"
         echo "5. Allow Service"
         echo "6. Remove Service"
-        echo "7. Enable Firewall"
+        echo "7. Reload Firewall"
         echo
         echo "0. Back"
         echo
