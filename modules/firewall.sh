@@ -6,6 +6,87 @@
 
 
 ##################################################
+# Function : check_firewall_ready
+# Purpose  : Verify firewalld is installed/running
+##################################################
+
+check_firewall_ready() {
+
+    if ! command -v firewall-cmd &>/dev/null; then
+        error "Firewalld is not installed."
+        return 1
+    fi
+
+    if ! systemctl is-active --quiet firewalld; then
+        error "Firewall is not running."
+        return 1
+    fi
+
+    return 0
+}
+
+
+##################################################
+# Function : get_firewall_zone
+# Purpose  : Determine firewall zone to manage
+##################################################
+
+get_firewall_zone() {
+
+    local zone
+
+    # Try zone of default route interface first
+    local interface
+
+    interface=$(ip route show default 2>/dev/null |
+        awk 'NR==1 {print $5}')
+
+    if [ -n "$interface" ]; then
+
+        zone=$(firewall-cmd \
+            --get-zone-of-interface="$interface" \
+            2>/dev/null)
+
+    fi
+
+    # Fallback to default zone
+    if [ -z "$zone" ] || [ "$zone" = "no zone" ]; then
+        zone=$(firewall-cmd --get-default-zone 2>/dev/null)
+    fi
+
+    if [ -z "$zone" ]; then
+        error "Unable to determine firewall zone."
+        return 1
+    fi
+
+    echo "$zone"
+}
+
+
+
+##################################################
+# Function : get_ssh_port
+# Purpose  : Detect configured SSH port
+##################################################
+
+get_ssh_port() {
+
+    local ssh_port
+
+    if command -v sshd &>/dev/null; then
+
+        ssh_port=$(sshd -T 2>/dev/null |
+            awk '$1 == "port" {print $2; exit}')
+
+    fi
+
+    echo "${ssh_port:-22}"
+}
+
+
+
+
+##################################################
 # Function : firewall_status
 # Purpose  : Display current firewall status
 ##################################################
@@ -50,7 +131,7 @@ firewall_status() {
 
 ##################################################
 # Function : list_firewall_rules
-# Purpose  : Display current firewall rules
+# Purpose  : Display firewall rules
 ##################################################
 
 list_firewall_rules() {
@@ -60,33 +141,28 @@ list_firewall_rules() {
     echo "========== Firewall Rules =========="
     echo
 
-    # Check if firewalld is installed
-    if ! command -v firewall-cmd &>/dev/null; then
-        error "Firewalld is not installed."
+    if ! check_firewall_ready; then
         pause
         return
     fi
 
-    # Check if firewall is running
-    if ! systemctl is-active --quiet firewalld; then
-        error "Firewall is not running."
+    zone=$(get_firewall_zone)
+
+    if [ -z "$zone" ]; then
         pause
         return
     fi
 
-    echo "Current Active Zone:"
-    echo
-
-    firewall-cmd --get-active-zones
-
+    echo "Active Zone : $zone"
     echo
     echo "========== Active Firewall Rules =========="
     echo
 
-    firewall-cmd --list-all
+    firewall-cmd --zone="$zone" --list-all
 
     pause
 }
+
 
 
 ##################################################
@@ -116,7 +192,7 @@ validate_port() {
 
 ##################################################
 # Function : allow_port
-# Purpose  : Allow a port through the firewall
+# Purpose  : Allow port through firewall
 ##################################################
 
 allow_port() {
@@ -126,19 +202,20 @@ allow_port() {
     echo "========== Allow Firewall Port =========="
     echo
 
-    # Check firewalld
-    if ! command -v firewall-cmd &>/dev/null; then
-        error "Firewalld is not installed."
+    if ! check_firewall_ready; then
         pause
         return
     fi
 
-    # Check firewall state
-    if ! systemctl is-active --quiet firewalld; then
-        error "Firewall is not running."
+    zone=$(get_firewall_zone)
+
+    if [ -z "$zone" ]; then
         pause
         return
     fi
+
+    echo "Firewall Zone : $zone"
+    echo
 
     read -p "Enter port number: " port
 
@@ -150,6 +227,8 @@ allow_port() {
     echo
     read -p "Enter protocol (tcp/udp): " protocol
 
+    protocol=$(echo "$protocol" | tr '[:upper:]' '[:lower:]')
+
     case "$protocol" in
         tcp|udp)
             ;;
@@ -160,29 +239,37 @@ allow_port() {
             ;;
     esac
 
-    # Check whether port is already allowed
-    if firewall-cmd --permanent \
+    if firewall-cmd \
+        --permanent \
+        --zone="$zone" \
         --query-port="${port}/${protocol}" &>/dev/null; then
 
-        warning "Port ${port}/${protocol} is already allowed."
+        warning "Port ${port}/${protocol} is already allowed in zone '$zone'."
         pause
         return
     fi
 
     echo
-    read -p "Allow port ${port}/${protocol}? (Y/N): " confirm
+    echo "Zone     : $zone"
+    echo "Port     : $port"
+    echo "Protocol : $protocol"
+    echo
+
+    read -p "Allow this port? (Y/N): " confirm
 
     case "$confirm" in
 
         Y|y)
 
-            if firewall-cmd --permanent \
+            if firewall-cmd \
+                --permanent \
+                --zone="$zone" \
                 --add-port="${port}/${protocol}" >/dev/null; then
 
                 if firewall-cmd --reload >/dev/null; then
-                    success "Port ${port}/${protocol} allowed successfully."
+                    success "Port ${port}/${protocol} allowed successfully in zone '$zone'."
                 else
-                    error "Port was saved but firewall reload failed."
+                    error "Rule was saved but firewall reload failed."
                 fi
 
             else
@@ -204,9 +291,10 @@ allow_port() {
 }
 
 
+
 ##################################################
 # Function : remove_port
-# Purpose  : Remove an allowed firewall port
+# Purpose  : Safely remove allowed firewall port
 ##################################################
 
 remove_port() {
@@ -216,19 +304,20 @@ remove_port() {
     echo "========== Remove Firewall Port =========="
     echo
 
-    # Check firewalld
-    if ! command -v firewall-cmd &>/dev/null; then
-        error "Firewalld is not installed."
+    if ! check_firewall_ready; then
         pause
         return
     fi
 
-    # Check firewall state
-    if ! systemctl is-active --quiet firewalld; then
-        error "Firewall is not running."
+    zone=$(get_firewall_zone)
+
+    if [ -z "$zone" ]; then
         pause
         return
     fi
+
+    echo "Firewall Zone : $zone"
+    echo
 
     read -p "Enter port number: " port
 
@@ -240,42 +329,72 @@ remove_port() {
     echo
     read -p "Enter protocol (tcp/udp): " protocol
 
-    case "$protocol" in
+    protocol=$(echo "$protocol" | tr '[:upper:]' '[:lower:]')
 
+    case "$protocol" in
         tcp|udp)
             ;;
-
         *)
             error "Protocol must be tcp or udp."
             pause
             return
             ;;
-
     esac
 
-    # Check whether port is currently allowed
-    if ! firewall-cmd --permanent \
+    if ! firewall-cmd \
+        --permanent \
+        --zone="$zone" \
         --query-port="${port}/${protocol}" &>/dev/null; then
 
-        warning "Port ${port}/${protocol} is not currently allowed."
+        warning "Port ${port}/${protocol} is not currently allowed in zone '$zone'."
         pause
         return
     fi
 
+    ##################################################
+    # SSH protection
+    ##################################################
+
+    ssh_port=$(get_ssh_port)
+
+    if [ "$protocol" = "tcp" ] &&
+       [ "$port" = "$ssh_port" ]; then
+
+        echo
+        warning "Port $port is currently configured as the SSH port."
+        warning "Removing it may block remote SSH access."
+        echo
+
+        read -p "Type YES to continue: " ssh_confirm
+
+        if [ "$ssh_confirm" != "YES" ]; then
+            warning "Operation cancelled."
+            pause
+            return
+        fi
+    fi
+
     echo
-    read -p "Remove port ${port}/${protocol}? (Y/N): " confirm
+    echo "Zone     : $zone"
+    echo "Port     : $port"
+    echo "Protocol : $protocol"
+    echo
+
+    read -p "Remove this firewall port? (Y/N): " confirm
 
     case "$confirm" in
 
         Y|y)
 
-            if firewall-cmd --permanent \
+            if firewall-cmd \
+                --permanent \
+                --zone="$zone" \
                 --remove-port="${port}/${protocol}" >/dev/null; then
 
                 if firewall-cmd --reload >/dev/null; then
                     success "Port ${port}/${protocol} removed successfully."
                 else
-                    error "Port was removed from configuration but firewall reload failed."
+                    error "Rule changed but firewall reload failed."
                 fi
 
             else
@@ -284,12 +403,10 @@ remove_port() {
             ;;
 
         N|n)
-
             warning "Operation cancelled."
             ;;
 
         *)
-
             error "Invalid choice."
             ;;
 
@@ -297,6 +414,8 @@ remove_port() {
 
     pause
 }
+
+
 
 
 ##################################################
@@ -326,7 +445,7 @@ validate_firewall_service() {
 
 ##################################################
 # Function : allow_service
-# Purpose  : Allow a predefined firewall service
+# Purpose  : Allow predefined firewall service
 ##################################################
 
 allow_service() {
@@ -336,19 +455,20 @@ allow_service() {
     echo "========== Allow Firewall Service =========="
     echo
 
-    # Check firewalld installation
-    if ! command -v firewall-cmd &>/dev/null; then
-        error "Firewalld is not installed."
+    if ! check_firewall_ready; then
         pause
         return
     fi
 
-    # Check firewall state
-    if ! systemctl is-active --quiet firewalld; then
-        error "Firewall is not running."
+    zone=$(get_firewall_zone)
+
+    if [ -z "$zone" ]; then
         pause
         return
     fi
+
+    echo "Firewall Zone : $zone"
+    echo
 
     read -p "Enter service name: " service
 
@@ -357,11 +477,12 @@ allow_service() {
         return
     fi
 
-    # Check whether service is already allowed
-    if firewall-cmd --permanent \
+    if firewall-cmd \
+        --permanent \
+        --zone="$zone" \
         --query-service="$service" &>/dev/null; then
 
-        warning "Service '$service' is already allowed."
+        warning "Service '$service' is already allowed in zone '$zone'."
         pause
         return
     fi
@@ -373,11 +494,13 @@ allow_service() {
 
         Y|y)
 
-            if firewall-cmd --permanent \
+            if firewall-cmd \
+                --permanent \
+                --zone="$zone" \
                 --add-service="$service" >/dev/null; then
 
                 if firewall-cmd --reload >/dev/null; then
-                    success "Service '$service' allowed successfully."
+                    success "Service '$service' allowed successfully in zone '$zone'."
                 else
                     error "Service was added but firewall reload failed."
                 fi
@@ -388,12 +511,10 @@ allow_service() {
             ;;
 
         N|n)
-
             warning "Operation cancelled."
             ;;
 
         *)
-
             error "Invalid choice."
             ;;
 
@@ -403,9 +524,10 @@ allow_service() {
 }
 
 
+
 ##################################################
 # Function : remove_service
-# Purpose  : Remove an allowed firewall service
+# Purpose  : Safely remove firewall service
 ##################################################
 
 remove_service() {
@@ -415,35 +537,55 @@ remove_service() {
     echo "========== Remove Firewall Service =========="
     echo
 
-    # Check firewalld installation
-    if ! command -v firewall-cmd &>/dev/null; then
-        error "Firewalld is not installed."
+    if ! check_firewall_ready; then
         pause
         return
     fi
 
-    # Check firewall state
-    if ! systemctl is-active --quiet firewalld; then
-        error "Firewall is not running."
+    zone=$(get_firewall_zone)
+
+    if [ -z "$zone" ]; then
         pause
         return
     fi
+
+    echo "Firewall Zone : $zone"
+    echo
 
     read -p "Enter service name: " service
 
-    # Validate service
     if ! validate_firewall_service "$service"; then
         pause
         return
     fi
 
-    # Check whether service is currently allowed
-    if ! firewall-cmd --permanent \
+    if ! firewall-cmd \
+        --permanent \
+        --zone="$zone" \
         --query-service="$service" &>/dev/null; then
 
-        warning "Service '$service' is not currently allowed."
+        warning "Service '$service' is not currently allowed in zone '$zone'."
         pause
         return
+    fi
+
+    ##################################################
+    # SSH protection
+    ##################################################
+
+    if [ "$service" = "ssh" ]; then
+
+        echo
+        warning "Removing the SSH firewall service may block remote access."
+        echo
+
+        read -p "Type YES to continue: " ssh_confirm
+
+        if [ "$ssh_confirm" != "YES" ]; then
+            warning "Operation cancelled."
+            pause
+            return
+        fi
     fi
 
     echo
@@ -453,7 +595,9 @@ remove_service() {
 
         Y|y)
 
-            if firewall-cmd --permanent \
+            if firewall-cmd \
+                --permanent \
+                --zone="$zone" \
                 --remove-service="$service" >/dev/null; then
 
                 if firewall-cmd --reload >/dev/null; then
@@ -479,6 +623,8 @@ remove_service() {
 
     pause
 }
+
+
 
 
 ##################################################

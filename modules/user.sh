@@ -91,23 +91,46 @@ validate_new_user() {
     return 0
 }
 
-
 ##################################################
-# Function : protect_root
-# Purpose  : Prevents operations on the root user
+# Function : protect_system_user
+# Purpose  : Prevent dangerous operations on
+#            root and system accounts
 ##################################################
 
-protect_root() {
+protect_system_user() {
 
     local username="$1"
+    local uid
+    local uid_min
 
-    if [ "$username" = "root" ]; then
+    uid=$(id -u "$username" 2>/dev/null)
+
+    if [ -z "$uid" ]; then
+        error "Unable to determine UID for '$username'."
+        return 1
+    fi
+
+    # Never allow destructive operations on root
+    if [ "$uid" -eq 0 ]; then
         error "Operation cannot be performed on the root user."
+        return 1
+    fi
+
+    # Read normal-user UID threshold from login.defs
+    uid_min=$(awk '/^[[:space:]]*UID_MIN[[:space:]]+/ {print $2; exit}' /etc/login.defs)
+
+    # Fallback for normal RHEL configuration
+    uid_min=${uid_min:-1000}
+
+    if [ "$uid" -lt "$uid_min" ]; then
+        error "Operation blocked for system account '$username'."
         return 1
     fi
 
     return 0
 }
+
+
 
 
 ##################################################
@@ -140,9 +163,10 @@ fi
 }
 
 
+
 ##################################################
 # Function : delete_user
-# Purpose  : Deletes an existing Linux user
+# Purpose  : Safely delete an existing Linux user
 ##################################################
 
 delete_user() {
@@ -154,17 +178,48 @@ delete_user() {
 
     read -p "Enter Username: " username
 
-  if ! validate_existing_user "$username"; then
-    pause
-    return
-fi
+    if ! validate_existing_user "$username"; then
+        pause
+        return
+    fi
 
-   if ! protect_root "$username"; then
-    pause
-    return
-fi
+    if ! protect_system_user "$username"; then
+        pause
+        return
+    fi
+
+    ##################################################
+    # Check active login sessions
+    ##################################################
+
+    if who | awk '{print $1}' | grep -Fxq "$username"; then
+        error "User '$username' is currently logged in."
+        warning "Log out the user before deleting the account."
+        pause
+        return
+    fi
+
+    ##################################################
+    # Check running processes
+    ##################################################
+
+    if pgrep -u "$username" &>/dev/null; then
+        error "User '$username' currently has running processes."
+        warning "Stop the user's processes before deleting the account."
+        pause
+        return
+    fi
+
+    home_dir=$(getent passwd "$username" | cut -d: -f6)
 
     echo
+    echo "Username       : $username"
+    echo "Home Directory : $home_dir"
+    echo
+
+    warning "The user account and its home directory will be permanently deleted."
+    echo
+
     read -p "Delete '$username' permanently? (Y/N): " confirm
 
     case "$confirm" in
@@ -176,19 +231,17 @@ fi
             else
                 error "Failed to delete user."
             fi
-        ;;
+            ;;
 
         N|n)
 
             warning "Operation cancelled."
-
-        ;;
+            ;;
 
         *)
 
             error "Invalid choice."
-
-        ;;
+            ;;
 
     esac
 
@@ -196,44 +249,46 @@ fi
 }
 
 
+
+
 ##################################################
 # Function : lock_user
-# Purpose  : Locks a Linux user account
+# Purpose  : Lock a Linux user account
 ##################################################
 
 lock_user() {
- 
- header 
- echo "========== Lock User =========="
- echo
 
- read -p "Enter Username: " username
+    header
 
-if ! validate_existing_user "$username"; then
-    pause
-    return
-fi
+    echo "========== Lock User =========="
+    echo
 
- if ! protect_root "$username"; then
-    pause
-    return
-fi
-    
+    read -p "Enter Username: " username
 
-status=$(passwd -S "$username")
-
-    if [[ "$status" == *" L "* ]] ; then
-        error "User '$username' is already locked."
+    if ! validate_existing_user "$username"; then
         pause
         return
     fi
 
- 
+    if ! protect_system_user "$username"; then
+        pause
+        return
+    fi
 
-       echo
-    read -p "Lock '$username' ? (Y/N): " confirm
+    password_status=$(passwd -S "$username" 2>/dev/null | awk '{print $2}')
 
-case "$confirm" in
+    if [ "$password_status" = "L" ] ||
+       [ "$password_status" = "LK" ]; then
+
+        warning "User '$username' is already locked."
+        pause
+        return
+    fi
+
+    echo
+    read -p "Lock '$username'? (Y/N): " confirm
+
+    case "$confirm" in
 
         Y|y)
 
@@ -242,34 +297,34 @@ case "$confirm" in
             else
                 error "Failed to lock user."
             fi
-        ;;
+            ;;
 
         N|n)
 
             warning "Operation cancelled."
-
-        ;;
+            ;;
 
         *)
 
             error "Invalid choice."
-
-        ;;
+            ;;
 
     esac
 
     pause
-
 }
+
 
 
 ##################################################
 # Function : unlock_user
-# Purpose  : unlocks a Linux user account
+# Purpose  : Unlock a Linux user account
 ##################################################
 
 unlock_user() {
-    header 
+
+    header
+
     echo "========== Unlock User =========="
     echo
 
@@ -280,50 +335,52 @@ unlock_user() {
         return
     fi
 
-    if ! protect_root "$username"; then
-    pause
-    return
-fi
+    if ! protect_system_user "$username"; then
+        pause
+        return
+    fi
 
-    status=$(passwd -S "$username")
+    password_status=$(passwd -S "$username" 2>/dev/null | awk '{print $2}')
 
-        if [[ "$status" == *" P "* ]]; then
-            error "User '$username' is already unlocked."
-            pause 
-            return
-        fi
+    if [ "$password_status" != "L" ] &&
+       [ "$password_status" != "LK" ]; then
 
+        warning "User '$username' is not locked."
+        pause
+        return
+    fi
 
-        echo
-        read -p "Unlock user '$username' ? (Y/N): " confirm
+    echo
+    read -p "Unlock user '$username'? (Y/N): " confirm
 
- case "$confirm" in
+    case "$confirm" in
 
         Y|y)
 
-        if passwd -u "$username"; then
-            success "User '$username' unlocked successfully."
-        else
-            error "Failed to unlock user. Make sure the account has a password set."
-        fi
-        ;;
+            if passwd -u "$username"; then
+                success "User '$username' unlocked successfully."
+            else
+                error "Failed to unlock user."
+                warning "The account may not have a valid password."
+            fi
+            ;;
 
         N|n)
 
             warning "Operation cancelled."
-
-        ;;
+            ;;
 
         *)
 
             error "Invalid choice."
-
-        ;;
+            ;;
 
     esac
 
     pause
 }
+
+
 
 
 ##################################################
@@ -343,7 +400,7 @@ reset_password() {
         return
     fi
 
-    if ! protect_root "$username"; then
+    if ! protect_system_user "$username"; then
     pause
     return
 fi
@@ -397,11 +454,25 @@ user_information() {
     status=$(passwd -S "$username")
     password_status=$(echo "$status" | awk '{print $2}')
 
-    if [ "$password_status" = "L" ]; then
+   case "$password_status" in
+
+    L|LK)
         account_status="Locked"
-    else
-        account_status="Unlocked"
-    fi
+        ;;
+
+    P|PS)
+        account_status="Password Set / Unlocked"
+        ;;
+
+    NP)
+        account_status="No Password"
+        ;;
+
+    *)
+        account_status="Unknown"
+        ;;
+
+esac
 
     echo "========================================"
     echo "         User Information"
@@ -431,7 +502,6 @@ user_information() {
 }
 
 
-
 ##################################################
 # Function : list_users
 # Purpose  : Displays all normal Linux users
@@ -444,23 +514,34 @@ list_users() {
     echo "========== User List =========="
     echo
 
-    printf "%-20s %-10s\n" "USERNAME" "UID"
-    printf "%-20s %-10s\n" "--------------------" "----------"
-    printf "%-20s %-10s %-20s\n" "USERNAME" "UID" "SHELL"
+    uid_min=$(awk '/^[[:space:]]*UID_MIN[[:space:]]+/ {print $2; exit}' /etc/login.defs)
+    uid_min=${uid_min:-1000}
 
-awk -F: '$3 >= 1000 && $3 < 65534 {
-    printf "%-20s %-10s %-20s\n", $1, $3, $7
-}' /etc/passwd
+    printf "%-20s %-10s %-25s\n" \
+        "USERNAME" "UID" "SHELL"
 
+    printf "%-20s %-10s %-25s\n" \
+        "--------------------" \
+        "----------" \
+        "-------------------------"
 
-    total=$(awk -F: '$3 >= 1000 && $3 < 65534 {count++} END {print count}' /etc/passwd)
+    awk -F: -v min="$uid_min" \
+    '$3 >= min && $3 < 65534 {
+        printf "%-20s %-10s %-25s\n", $1, $3, $7
+    }' /etc/passwd
+
+    total=$(awk -F: -v min="$uid_min" \
+    '$3 >= min && $3 < 65534 {count++}
+     END {print count+0}' /etc/passwd)
 
     echo
-    echo "----------------------------------------"
+    echo "-------------------------------------------------------"
     echo "Total Users : $total"
 
     pause
 }
+
+
 
 
 

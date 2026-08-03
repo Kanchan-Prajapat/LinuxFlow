@@ -40,6 +40,8 @@ view_acl() {
 }
 
 
+
+
 ##################################################
 # Function : validate_acl_permission
 # Purpose  : Validate ACL permission format
@@ -56,6 +58,35 @@ validate_acl_permission() {
 
     return 0
 }
+
+
+##################################################
+# Function : validate_acl_target
+# Purpose  : Validate target before ACL modification
+##################################################
+
+validate_acl_target() {
+
+    local filepath="$1"
+
+    if ! validate_file "$filepath"; then
+        return 1
+    fi
+
+    # Use protection from permission.sh
+    if ! protect_critical_path "$filepath"; then
+        return 1
+    fi
+
+    # Avoid ambiguous symlink ACL operations
+    if [ -L "$filepath" ]; then
+        error "ACL modification on symbolic links is not supported."
+        return 1
+    fi
+
+    return 0
+}
+
 
 
 
@@ -128,7 +159,6 @@ set_user_acl() {
 }
 
 
-
 ##################################################
 # Function : set_group_acl
 # Purpose  : Set ACL permission for a specific group
@@ -141,8 +171,8 @@ set_group_acl() {
     echo "========== Set Group ACL =========="
     echo
 
-    # Check ACL utility
-    if ! command -v setfacl &>/dev/null; then
+    if ! command -v setfacl &>/dev/null ||
+       ! command -v getfacl &>/dev/null; then
         error "ACL utilities are not installed."
         pause
         return
@@ -150,7 +180,7 @@ set_group_acl() {
 
     read -p "Enter file/directory path: " filepath
 
-    if ! validate_file "$filepath"; then
+    if ! validate_acl_target "$filepath"; then
         pause
         return
     fi
@@ -171,27 +201,48 @@ set_group_acl() {
         return
     fi
 
+    current_acl=$(getfacl -cp -- "$filepath" 2>/dev/null |
+        awk -F: -v group="$groupname" \
+        '$1=="group" && $2==group {print $3; exit}')
+
     echo
-    read -p "Set '$permission' ACL for group '$groupname'? (Y/N): " confirm
+    echo "Target     : $filepath"
+    echo "Group      : $groupname"
+
+    if [ -n "$current_acl" ]; then
+        echo "Current ACL: $current_acl"
+    else
+        echo "Current ACL: None"
+    fi
+
+    echo "New ACL    : $permission"
+    echo
+
+    read -p "Apply this ACL? (Y/N): " confirm
 
     case "$confirm" in
 
         Y|y)
 
-            if setfacl -m "g:${groupname}:${permission}" "$filepath"; then
+            if setfacl -m "g:${groupname}:${permission}" -- "$filepath"; then
+
                 success "ACL set successfully for group '$groupname'."
+
+                echo
+                echo "Updated ACL:"
+                echo "----------------------------------------"
+                getfacl -- "$filepath"
+
             else
                 error "Failed to set group ACL."
             fi
             ;;
 
         N|n)
-
             warning "Operation cancelled."
             ;;
 
         *)
-
             error "Invalid choice."
             ;;
 
@@ -199,6 +250,7 @@ set_group_acl() {
 
     pause
 }
+
 
 ##################################################
 # Function : remove_user_acl
@@ -212,8 +264,8 @@ remove_user_acl() {
     echo "========== Remove User ACL =========="
     echo
 
-    # Check ACL utility
-    if ! command -v setfacl &>/dev/null; then
+    if ! command -v setfacl &>/dev/null ||
+       ! command -v getfacl &>/dev/null; then
         error "ACL utilities are not installed."
         pause
         return
@@ -221,7 +273,7 @@ remove_user_acl() {
 
     read -p "Enter file/directory path: " filepath
 
-    if ! validate_file "$filepath"; then
+    if ! validate_acl_target "$filepath"; then
         pause
         return
     fi
@@ -234,9 +286,10 @@ remove_user_acl() {
         return
     fi
 
-    # Check whether user ACL exists
-    if ! getfacl -cp "$filepath" 2>/dev/null |
-        grep -q "^user:${username}:"; then
+    if ! getfacl -cp -- "$filepath" 2>/dev/null |
+        awk -F: -v user="$username" \
+        '$1=="user" && $2==user {found=1}
+         END {exit !found}'; then
 
         warning "No ACL entry found for user '$username'."
         pause
@@ -250,8 +303,15 @@ remove_user_acl() {
 
         Y|y)
 
-            if setfacl -x "u:${username}" "$filepath"; then
+            if setfacl -x "u:${username}" -- "$filepath"; then
+
                 success "ACL removed successfully for user '$username'."
+
+                echo
+                echo "Updated ACL:"
+                echo "----------------------------------------"
+                getfacl -- "$filepath"
+
             else
                 error "Failed to remove user ACL."
             fi
@@ -271,6 +331,7 @@ remove_user_acl() {
 }
 
 
+
 ##################################################
 # Function : remove_group_acl
 # Purpose  : Remove ACL entry of a specific group
@@ -283,8 +344,8 @@ remove_group_acl() {
     echo "========== Remove Group ACL =========="
     echo
 
-    # Check ACL utility
-    if ! command -v setfacl &>/dev/null; then
+    if ! command -v setfacl &>/dev/null ||
+       ! command -v getfacl &>/dev/null; then
         error "ACL utilities are not installed."
         pause
         return
@@ -292,7 +353,7 @@ remove_group_acl() {
 
     read -p "Enter file/directory path: " filepath
 
-    if ! validate_file "$filepath"; then
+    if ! validate_acl_target "$filepath"; then
         pause
         return
     fi
@@ -305,9 +366,10 @@ remove_group_acl() {
         return
     fi
 
-    # Check whether group ACL exists
-    if ! getfacl -cp "$filepath" 2>/dev/null |
-        grep -q "^group:${groupname}:"; then
+    if ! getfacl -cp -- "$filepath" 2>/dev/null |
+        awk -F: -v group="$groupname" \
+        '$1=="group" && $2==group {found=1}
+         END {exit !found}'; then
 
         warning "No ACL entry found for group '$groupname'."
         pause
@@ -321,20 +383,25 @@ remove_group_acl() {
 
         Y|y)
 
-            if setfacl -x "g:${groupname}" "$filepath"; then
+            if setfacl -x "g:${groupname}" -- "$filepath"; then
+
                 success "ACL removed successfully for group '$groupname'."
+
+                echo
+                echo "Updated ACL:"
+                echo "----------------------------------------"
+                getfacl -- "$filepath"
+
             else
                 error "Failed to remove group ACL."
             fi
             ;;
 
         N|n)
-
             warning "Operation cancelled."
             ;;
 
         *)
-
             error "Invalid choice."
             ;;
 
@@ -342,6 +409,7 @@ remove_group_acl() {
 
     pause
 }
+
 
 
 ##################################################
@@ -356,8 +424,8 @@ remove_all_acl() {
     echo "========== Remove All ACL =========="
     echo
 
-    # Check ACL utility
-    if ! command -v setfacl &>/dev/null; then
+    if ! command -v setfacl &>/dev/null ||
+       ! command -v getfacl &>/dev/null; then
         error "ACL utilities are not installed."
         pause
         return
@@ -365,7 +433,23 @@ remove_all_acl() {
 
     read -p "Enter file/directory path: " filepath
 
-    if ! validate_file "$filepath"; then
+    if ! validate_acl_target "$filepath"; then
+        pause
+        return
+    fi
+
+    acl_data=$(getfacl -cp -- "$filepath" 2>/dev/null)
+
+    # Named user/group entries indicate extended access ACLs
+    if ! printf '%s\n' "$acl_data" |
+        awk -F: '
+            ($1=="user" || $1=="group") && $2!="" {
+                found=1
+            }
+            END {exit !found}
+        '; then
+
+        warning "No extended user/group ACL entries found."
         pause
         return
     fi
@@ -373,32 +457,37 @@ remove_all_acl() {
     echo
     echo "Current ACL:"
     echo "----------------------------------------"
-    getfacl "$filepath"
+    getfacl -- "$filepath"
 
     echo
-    warning "This will remove all extended ACL entries."
+    warning "This will remove all extended access ACL entries."
     echo
 
-    read -p "Remove all ACL entries? (Y/N): " confirm
+    read -p "Remove all extended ACL entries? (Y/N): " confirm
 
     case "$confirm" in
 
         Y|y)
 
-            if setfacl -b "$filepath"; then
+            if setfacl -b -- "$filepath"; then
+
                 success "All extended ACL entries removed successfully."
+
+                echo
+                echo "Updated ACL:"
+                echo "----------------------------------------"
+                getfacl -- "$filepath"
+
             else
                 error "Failed to remove ACL entries."
             fi
             ;;
 
         N|n)
-
             warning "Operation cancelled."
             ;;
 
         *)
-
             error "Invalid choice."
             ;;
 
@@ -406,8 +495,6 @@ remove_all_acl() {
 
     pause
 }
-
-
 
 
 

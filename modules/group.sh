@@ -85,23 +85,38 @@ validate_new_group() {
 }
 
 
-
 ##################################################
-# Function : protect_root
-# Purpose  : Prevents operations on the root user
+# Function : protect_system_group
+# Purpose  : Prevent modification of system groups
 ##################################################
 
-protect_root() {
+protect_system_group() {
 
-    local username="$1"
+    local groupname="$1"
+    local gid
+    local gid_min
 
-    if [ "$username" = "root" ]; then
-        error "Operation cannot be performed on the root user."
+    gid=$(getent group "$groupname" | cut -d: -f3)
+
+    if [ -z "$gid" ]; then
+        error "Unable to determine GID for '$groupname'."
+        return 1
+    fi
+
+    gid_min=$(awk '/^[[:space:]]*GID_MIN[[:space:]]+/ {
+        print $2
+        exit
+    }' /etc/login.defs)
+
+    gid_min=${gid_min:-1000}
+
+    if [ "$gid" -lt "$gid_min" ]; then
+        error "Operation blocked for system group '$groupname'."
         return 1
     fi
 
     return 0
-}
+}   
 
 
 
@@ -158,7 +173,7 @@ create_group() {
 
 ##################################################
 # Function : delete_group
-# Purpose  : Delete an existing Linux group
+# Purpose  : Safely delete an existing Linux group
 ##################################################
 
 delete_group() {
@@ -175,7 +190,40 @@ delete_group() {
         return
     fi
 
+    if ! protect_system_group "$groupname"; then
+        pause
+        return
+    fi
+
+    gid=$(getent group "$groupname" | cut -d: -f3)
+
+    ##################################################
+    # Check whether group is a primary group
+    ##################################################
+
+    primary_users=$(awk -F: -v gid="$gid" \
+        '$4 == gid {print $1}' /etc/passwd)
+
+    if [ -n "$primary_users" ]; then
+
+        error "Group '$groupname' is used as a primary group."
+
+        echo
+        echo "Primary group of:"
+        echo "----------------------------------------"
+        echo "$primary_users"
+
+        echo
+        warning "Change these users' primary group before deleting it."
+
+        pause
+        return
+    fi
+
     echo
+    warning "Group '$groupname' will be permanently deleted."
+    echo
+
     read -p "Delete group '$groupname'? (Y/N): " confirm
 
     case "$confirm" in
@@ -187,17 +235,17 @@ delete_group() {
             else
                 error "Failed to delete group '$groupname'."
             fi
-        ;;
+            ;;
 
         N|n)
 
             warning "Operation cancelled."
-        ;;
+            ;;
 
         *)
 
             error "Invalid choice."
-        ;;
+            ;;
 
     esac
 
@@ -207,7 +255,7 @@ delete_group() {
 
 ##################################################
 # Function : rename_group
-# Purpose  : Rename an existing Linux group
+# Purpose  : Safely rename an existing Linux group
 ##################################################
 
 rename_group() {
@@ -224,8 +272,12 @@ rename_group() {
         return
     fi
 
-    echo
+    if ! protect_system_group "$old_group"; then
+        pause
+        return
+    fi
 
+    echo
     read -p "Enter New Group Name: " new_group
 
     if ! validate_new_group "$new_group"; then
@@ -234,7 +286,6 @@ rename_group() {
     fi
 
     echo
-
     read -p "Rename group '$old_group' to '$new_group'? (Y/N): " confirm
 
     case "$confirm" in
@@ -246,23 +297,22 @@ rename_group() {
             else
                 error "Failed to rename group."
             fi
-        ;;
+            ;;
 
         N|n)
 
             warning "Operation cancelled."
-        ;;
+            ;;
 
         *)
 
             error "Invalid choice."
-        ;;
+            ;;
 
     esac
 
     pause
 }
-
 
 
 
@@ -286,7 +336,6 @@ add_user_to_group() {
     fi
 
     echo
-
     read -p "Enter Group Name: " groupname
 
     if ! validate_existing_group "$groupname"; then
@@ -294,8 +343,20 @@ add_user_to_group() {
         return
     fi
 
-    echo
+    ##################################################
+    # Check existing membership
+    ##################################################
 
+    if id -nG "$username" |
+        tr ' ' '\n' |
+        grep -Fxq "$groupname"; then
+
+        warning "User '$username' is already a member of '$groupname'."
+        pause
+        return
+    fi
+
+    echo
     read -p "Add user '$username' to group '$groupname'? (Y/N): " confirm
 
     case "$confirm" in
@@ -307,17 +368,17 @@ add_user_to_group() {
             else
                 error "Failed to add user to group."
             fi
-        ;;
+            ;;
 
         N|n)
 
             warning "Operation cancelled."
-        ;;
+            ;;
 
         *)
 
             error "Invalid choice."
-        ;;
+            ;;
 
     esac
 
@@ -326,9 +387,10 @@ add_user_to_group() {
 
 
 
+
 ##################################################
 # Function : remove_user_from_group
-# Purpose  : Remove a user from a Linux group
+# Purpose  : Safely remove user from supplementary group
 ##################################################
 
 remove_user_from_group() {
@@ -345,13 +407,13 @@ remove_user_from_group() {
         return
     fi
 
-    if ! protect_root "$username"; then
+    # Protect root/system accounts
+    if ! protect_system_user "$username"; then
         pause
         return
     fi
 
     echo
-
     read -p "Enter Group Name: " groupname
 
     if ! validate_existing_group "$groupname"; then
@@ -359,8 +421,39 @@ remove_user_from_group() {
         return
     fi
 
-    echo
+    ##################################################
+    # Check user's primary group
+    ##################################################
 
+    primary_group=$(id -gn "$username")
+
+    if [ "$primary_group" = "$groupname" ]; then
+
+        error "'$groupname' is the primary group of '$username'."
+
+        warning "Primary groups cannot be removed using this operation."
+
+        pause
+        return
+    fi
+
+    ##################################################
+    # Check supplementary membership
+    ##################################################
+
+    members=$(getent group "$groupname" | cut -d: -f4)
+
+    if ! echo "$members" |
+        tr ',' '\n' |
+        grep -Fxq "$username"; then
+
+        warning "User '$username' is not a supplementary member of '$groupname'."
+
+        pause
+        return
+    fi
+
+    echo
     read -p "Remove user '$username' from group '$groupname'? (Y/N): " confirm
 
     case "$confirm" in
@@ -368,21 +461,25 @@ remove_user_from_group() {
         Y|y)
 
             if gpasswd -d "$username" "$groupname"; then
+
                 success "User '$username' removed from group '$groupname' successfully."
+
             else
+
                 error "Failed to remove user from group."
+
             fi
-        ;;
+            ;;
 
         N|n)
 
             warning "Operation cancelled."
-        ;;
+            ;;
 
         *)
 
             error "Invalid choice."
-        ;;
+            ;;
 
     esac
 
@@ -390,9 +487,11 @@ remove_user_from_group() {
 }
 
 
+
+
 ##################################################
 # Function : group_information
-# Purpose  : Display information about a Linux group
+# Purpose  : Display information about Linux group
 ##################################################
 
 group_information() {
@@ -409,23 +508,32 @@ group_information() {
         return
     fi
 
-    echo
-
     group_info=$(getent group "$groupname")
 
     IFS=':' read -r group password gid members <<< "$group_info"
 
+    primary_users=$(awk -F: -v gid="$gid" \
+        '$4 == gid {print $1}' /etc/passwd |
+        paste -sd ',' -)
+
+    echo
     echo "========================================"
     echo "         Group Information"
     echo "========================================"
 
-    echo "Group Name      : $group"
-    echo "Group ID (GID)  : $gid"
+    echo "Group Name           : $group"
+    echo "Group ID (GID)       : $gid"
+
+    if [ -z "$primary_users" ]; then
+        echo "Primary Users        : None"
+    else
+        echo "Primary Users        : $primary_users"
+    fi
 
     if [ -z "$members" ]; then
-        echo "Members         : None"
+        echo "Supplementary Users  : None"
     else
-        echo "Members         : $members"
+        echo "Supplementary Users  : $members"
     fi
 
     echo "========================================"
@@ -434,9 +542,10 @@ group_information() {
 }
 
 
+
 ##################################################
 # Function : list_groups
-# Purpose  : Display all Linux groups
+# Purpose  : Display normal Linux groups
 ##################################################
 
 list_groups() {
@@ -446,14 +555,26 @@ list_groups() {
     echo "========== Group List =========="
     echo
 
-    printf "%-25s %-10s\n" "GROUP NAME" "GID"
-    printf "%-25s %-10s\n" "-------------------------" "----------"
+    gid_min=$(awk '/^[[:space:]]*GID_MIN[[:space:]]+/ {
+        print $2
+        exit
+    }' /etc/login.defs)
 
-    awk -F: '{
+    gid_min=${gid_min:-1000}
+
+    printf "%-25s %-10s\n" "GROUP NAME" "GID"
+    printf "%-25s %-10s\n" \
+        "-------------------------" \
+        "----------"
+
+    awk -F: -v min="$gid_min" \
+    '$3 >= min && $3 < 65534 {
         printf "%-25s %-10s\n", $1, $3
     }' /etc/group
 
-    total=$(awk -F: 'END {print NR}' /etc/group)
+    total=$(awk -F: -v min="$gid_min" \
+    '$3 >= min && $3 < 65534 {count++}
+     END {print count+0}' /etc/group)
 
     echo
     echo "----------------------------------------"
@@ -461,6 +582,7 @@ list_groups() {
 
     pause
 }
+
 
 
 ##################################################
@@ -480,7 +602,7 @@ echo
 echo "1. Create Group"
 echo "2. Delete Group"
 echo "3. Rename Group"
-echo "4. Add User to User"
+echo "4. Add User to Group"
 echo "5. Remove User From Group"
 echo "6. Group Information"
 echo "7. List Groups"
