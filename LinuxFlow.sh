@@ -16,6 +16,7 @@ source ./modules/service.sh
 source ./modules/firewall.sh
 source ./modules/acl.sh
 source ./modules/lvm.sh
+source ./modules/swap.sh
 ############################################
 # Application Started
 ############################################
@@ -113,8 +114,7 @@ lvm_menu
 10)
 
 echo
-echo "Swap Module Coming Soon"
-pause
+swap_menu
 ;;
 
 11)

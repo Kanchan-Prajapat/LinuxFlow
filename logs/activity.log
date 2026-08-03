@@ -42,3 +42,6 @@
 03-08-2026 20:38:23 | USER= | HOST=KanchanPrajapati | LinuxFlow Started
 03-08-2026 20:38:31 | USER= | HOST=KanchanPrajapati | ERROR : LVM utilities are not installed.
 03-08-2026 20:47:05 | USER= | HOST=KanchanPrajapati | LinuxFlow Closed
+03-08-2026 21:48:08 | USER= | HOST=KanchanPrajapati | LinuxFlow Started
+03-08-2026 21:48:19 | USER= | HOST=KanchanPrajapati | WARNING : No active swap is currently configured.
+03-08-2026 21:48:25 | USER= | HOST=KanchanPrajapati | WARNING : No active swap areas found.
