@@ -13,6 +13,7 @@ source ./modules/backup.sh
 source ./modules/permission.sh
 source ./modules/process.sh
 source ./modules/service.sh
+source ./modules/firewall.sh
 ############################################
 # Application Started
 ############################################
@@ -36,10 +37,10 @@ echo "3. Permission Manager"
 echo "4. Backup Manager"
 echo "5. Process Manager"
 echo "6. Service Manager"
-echo "7. ACL Manager"
-echo "8. LVM Manager"
-echo "9. Swap Manager"
-echo "10. Firewall Manager"
+echo "7. Firewall Manager"
+echo "8. ACL Manager"
+echo "9. LVM Manager"
+echo "10. Swap Manager"
 echo "11. SSH Manager"
 echo "12. Monitoring Dashboard"
 echo "13. Report Generator"
@@ -79,21 +80,18 @@ backup_menu
 
 echo
 process_menu
-pause
 ;;
 
 6)
 
 echo
 service_menu
-pause
 ;;
 
 7)
 
 echo
-echo "ACL Module Coming Soon"
-pause
+firewall_menu
 ;;
 
 8)
@@ -115,7 +113,7 @@ pause
 10)
 
 echo
-echo "Firewall Module Coming Soon"
+echo "ACL Module Coming Soon"
 pause
 ;;
 
