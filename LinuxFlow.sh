@@ -17,6 +17,7 @@ source ./modules/firewall.sh
 source ./modules/acl.sh
 source ./modules/lvm.sh
 source ./modules/swap.sh
+source ./modules/ssh.sh
 ############################################
 # Application Started
 ############################################
@@ -120,8 +121,7 @@ swap_menu
 11)
 
 echo
-echo "SSH Module Coming Soon"
-pause
+ssh_menu
 ;;
 
 12)

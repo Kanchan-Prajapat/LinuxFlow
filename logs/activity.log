@@ -45,3 +45,5 @@
 03-08-2026 21:48:08 | USER= | HOST=KanchanPrajapati | LinuxFlow Started
 03-08-2026 21:48:19 | USER= | HOST=KanchanPrajapati | WARNING : No active swap is currently configured.
 03-08-2026 21:48:25 | USER= | HOST=KanchanPrajapati | WARNING : No active swap areas found.
+05-08-2026 20:03:34 | USER= | HOST=KanchanPrajapati | LinuxFlow Started
+05-08-2026 20:03:39 | USER= | HOST=KanchanPrajapati | ERROR : OpenSSH Server is not installed.
