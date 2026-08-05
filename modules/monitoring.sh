@@ -2120,7 +2120,7 @@ monitoring_menu() {
                 ;;
 
             2)
-                cpu_usage
+                memory_usage
                 ;;
             
             3) 
