@@ -47,3 +47,8 @@
 03-08-2026 21:48:25 | USER= | HOST=KanchanPrajapati | WARNING : No active swap areas found.
 05-08-2026 20:03:34 | USER= | HOST=KanchanPrajapati | LinuxFlow Started
 05-08-2026 20:03:39 | USER= | HOST=KanchanPrajapati | ERROR : OpenSSH Server is not installed.
+05-08-2026 21:15:03 | USER= | HOST=KanchanPrajapati | LinuxFlow Closed
+05-08-2026 21:15:04 | USER= | HOST=KanchanPrajapati | LinuxFlow Started
+05-08-2026 21:15:36 | USER= | HOST=KanchanPrajapati | LinuxFlow Closed
+05-08-2026 21:15:38 | USER= | HOST=KanchanPrajapati | LinuxFlow Started
+05-08-2026 21:15:42 | USER= | HOST=KanchanPrajapati | ERROR : Cron utility is not installed.

@@ -18,6 +18,7 @@ source ./modules/acl.sh
 source ./modules/lvm.sh
 source ./modules/swap.sh
 source ./modules/ssh.sh
+source ./modules/cron.sh
 ############################################
 # Application Started
 ############################################
@@ -46,8 +47,9 @@ echo "8. ACL Manager"
 echo "9. LVM Manager"
 echo "10. Swap Manager"
 echo "11. SSH Manager"
-echo "12. Monitoring Dashboard"
-echo "13. Report Generator"
+echo "12. Cron Manager"
+echo "13. Monitoring Dashboard"
+echo "14. Report Generator"
 echo
 echo "0. Exit"
 
@@ -127,11 +129,17 @@ ssh_menu
 12)
 
 echo
+cron_menu
+;;
+
+13)
+
+echo
 echo "Monitoring Module Coming Soon"
 pause
 ;;
 
-13)
+14)
 
 echo
 echo "Reports Module Coming Soon"
