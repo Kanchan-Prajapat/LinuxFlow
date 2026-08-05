@@ -100,6 +100,8 @@ list_swap_areas() {
 
 
 
+
+
 ##################################################
 # Function : validate_swap_size
 # Purpose  : Validate swap size in GB
@@ -128,6 +130,30 @@ validate_swap_size() {
     return 0
 }
 
+
+##################################################
+# Function : get_swap_fstab_source
+# Purpose  : Get persistent fstab source for swap
+##################################################
+
+get_swap_fstab_source() {
+
+    local swap_path="$1"
+    local swap_uuid
+
+    if [ -b "$swap_path" ]; then
+
+        swap_uuid=$(blkid -s UUID -o value "$swap_path" 2>/dev/null)
+
+        if [ -n "$swap_uuid" ]; then
+            echo "UUID=$swap_uuid"
+            return
+        fi
+
+    fi
+
+    echo "$swap_path"
+}
 
 ##################################################
 # Function : create_swap_file
@@ -352,12 +378,32 @@ make_swap_persistent() {
     # Verify it is currently active swap
     ##################################################
 
-    if ! swapon --show=NAME --noheadings |
+    if ! swapon --show=NAME --noheadings 2>/dev/null |
         awk '{$1=$1; print}' |
         grep -Fxq "$swap_path"; then
 
         error "'$swap_path' is not currently active as swap."
         warning "Enable the swap before making it persistent."
+
+        pause
+        return
+    fi
+
+    ##################################################
+    # Determine fstab source
+    #
+    # Swap file   -> /swapfile
+    # Swap device -> UUID=...
+    ##################################################
+
+    if ! fstab_source=$(get_swap_fstab_source "$swap_path"); then
+
+        error "Unable to determine persistent source for '$swap_path'."
+
+        if [ -b "$swap_path" ]; then
+            warning "Unable to determine UUID for swap device."
+        fi
+
         pause
         return
     fi
@@ -368,8 +414,12 @@ make_swap_persistent() {
 
     if awk '
         /^[[:space:]]*#/ {next}
-        NF >= 3 && $3 == "swap" {print $1}
-    ' /etc/fstab | grep -Fxq "$swap_path"; then
+
+        NF >= 3 && $3 == "swap" {
+            print $1
+        }
+    ' /etc/fstab |
+        grep -Fxq "$fstab_source"; then
 
         warning "Swap is already configured in /etc/fstab."
         pause
@@ -377,12 +427,14 @@ make_swap_persistent() {
     fi
 
     echo
-    echo "Swap Path : $swap_path"
-    echo "FSTAB     : /etc/fstab"
-    echo
-    warning "This will configure the swap to activate automatically at boot."
+    echo "Swap Path    : $swap_path"
+    echo "FSTAB Source : $fstab_source"
+    echo "FSTAB        : /etc/fstab"
     echo
 
+    warning "This will configure the swap to activate automatically at boot."
+
+    echo
     read -p "Make this swap persistent? (Y/N): " confirm
 
     case "$confirm" in
@@ -397,6 +449,7 @@ make_swap_persistent() {
             backup_file="/etc/fstab.linuxflow.${timestamp}.bak"
 
             if ! cp -a /etc/fstab "$backup_file"; then
+
                 error "Failed to create /etc/fstab backup."
                 pause
                 return
@@ -408,23 +461,27 @@ make_swap_persistent() {
             # Add swap entry
             ##################################################
 
-            echo "$swap_path none swap defaults 0 0" >> /etc/fstab
-
-            if [ $? -ne 0 ]; then
+            if ! echo "$fstab_source none swap defaults 0 0" >> /etc/fstab; then
 
                 error "Failed to update /etc/fstab."
+                warning "Restoring previous /etc/fstab..."
 
-                cp -a "$backup_file" /etc/fstab
-
-                warning "Original /etc/fstab restored."
+                if cp -a "$backup_file" /etc/fstab; then
+                    success "Original /etc/fstab restored successfully."
+                else
+                    error "CRITICAL: Failed to restore /etc/fstab."
+                fi
 
                 pause
                 return
             fi
 
             ##################################################
-            # Validate fstab swap configuration
+            # Validate swap configuration
             ##################################################
+
+            echo
+            echo "Validating swap configuration..."
 
             if swapon -a; then
 
@@ -434,7 +491,15 @@ make_swap_persistent() {
                 echo "FSTAB Entry:"
                 echo "----------------------------------------"
 
-                grep -F "$swap_path" /etc/fstab
+                awk -v source="$fstab_source" '
+                    /^[[:space:]]*#/ {next}
+
+                    NF >= 3 &&
+                    $1 == source &&
+                    $3 == "swap" {
+                        print
+                    }
+                ' /etc/fstab
 
             else
 
@@ -556,7 +621,6 @@ enable_swap() {
 }
 
 
-
 ##################################################
 # Function : disable_swap
 # Purpose  : Safely disable an active swap area
@@ -570,6 +634,7 @@ disable_swap() {
     echo
 
     if [ -z "$(swapon --show --noheadings 2>/dev/null)" ]; then
+
         warning "No active swap areas found."
         pause
         return
@@ -577,12 +642,14 @@ disable_swap() {
 
     echo "Active Swap Areas:"
     echo "----------------------------------------"
-    swapon --show
-    echo
 
+    swapon --show
+
+    echo
     read -p "Enter swap file/device path: " swap_path
 
     if [ -z "$swap_path" ]; then
+
         error "Swap path cannot be empty."
         pause
         return
@@ -602,13 +669,27 @@ disable_swap() {
     fi
 
     ##################################################
+    # Determine persistent fstab source
+    ##################################################
+
+    if ! fstab_source=$(get_swap_fstab_source "$swap_path"); then
+
+        error "Unable to determine swap source."
+
+        pause
+        return
+    fi
+
+    ##################################################
     # Get swap usage
     ##################################################
 
-    swap_used=$(swapon --show=NAME,USED \
+    swap_used=$(swapon \
+        --show=NAME,USED \
         --bytes \
         --noheadings 2>/dev/null |
-        awk -v path="$swap_path" '$1 == path {print $2}')
+        awk -v path="$swap_path" \
+        '$1 == path {print $2}')
 
     swap_used=${swap_used:-0}
 
@@ -620,15 +701,17 @@ disable_swap() {
         awk '/^Mem:/ {print $7}')
 
     if [[ ! "$available_ram" =~ ^[0-9]+$ ]]; then
+
         error "Unable to determine available memory."
+
         pause
         return
     fi
 
     echo
-    echo "Swap Path       : $swap_path"
+    echo "Swap Path           : $swap_path"
     echo "Swap Currently Used : $(numfmt --to=iec "$swap_used" 2>/dev/null)"
-    echo "Available RAM   : $(numfmt --to=iec "$available_ram" 2>/dev/null)"
+    echo "Available RAM       : $(numfmt --to=iec "$available_ram" 2>/dev/null)"
 
     ##################################################
     # Memory safety check
@@ -637,6 +720,7 @@ disable_swap() {
     if [ "$swap_used" -gt "$available_ram" ]; then
 
         echo
+
         error "Not enough available RAM to safely disable this swap."
         warning "Disabling it may cause memory exhaustion."
 
@@ -644,18 +728,32 @@ disable_swap() {
         return
     fi
 
-    echo
+    ##################################################
+    # Check persistent configuration
+    ##################################################
 
-    if grep -Eq \
-        "^[[:space:]]*$(printf '%s' "$swap_path" | sed 's/[][\/.^$*+?{}|()]/\\&/g')[[:space:]].*[[:space:]]swap[[:space:]]" \
-        /etc/fstab; then
+    if awk -v source="$fstab_source" '
+        /^[[:space:]]*#/ {next}
 
-        warning "This swap appears to be configured in /etc/fstab."
-        warning "Disabling it now does NOT remove its persistent configuration."
-        warning "It may become active again after reboot."
+        NF >= 3 &&
+        $1 == source &&
+        $3 == "swap" {
+            found=1
+        }
+
+        END {
+            exit !found
+        }
+    ' /etc/fstab; then
+
         echo
+
+        warning "This swap is configured in /etc/fstab."
+        warning "Disabling it does NOT remove its persistent configuration."
+        warning "It may become active again after reboot."
     fi
 
+    echo
     read -p "Disable this swap? (Y/N): " confirm
 
     case "$confirm" in
@@ -671,22 +769,30 @@ disable_swap() {
                 echo "----------------------------------------"
 
                 if [ -z "$(swapon --show --noheadings 2>/dev/null)" ]; then
+
                     echo "No active swap areas."
+
                 else
+
                     swapon --show
+
                 fi
 
             else
+
                 error "Failed to disable swap."
                 warning "The system may not have enough available memory."
+
             fi
             ;;
 
         N|n)
+
             warning "Operation cancelled."
             ;;
 
         *)
+
             error "Invalid choice."
             ;;
 
@@ -1032,6 +1138,7 @@ remove_swap_file() {
 }
 
 
+
 ##################################################
 # Function : swap_information
 # Purpose  : Display detailed swap information
@@ -1045,6 +1152,7 @@ swap_information() {
     echo
 
     if [ -z "$(swapon --show --noheadings 2>/dev/null)" ]; then
+
         warning "No active swap areas found."
         pause
         return
@@ -1052,33 +1160,51 @@ swap_information() {
 
     echo "Active Swap Areas:"
     echo "----------------------------------------"
-    swapon --show
-    echo
 
+    swapon --show
+
+    echo
     read -p "Enter swap file/device path: " swap_path
 
     if [ -z "$swap_path" ]; then
+
         error "Swap path cannot be empty."
         pause
         return
     fi
 
+    ##################################################
     # Check whether selected swap is active
+    ##################################################
+
     if ! swapon --show=NAME --noheadings 2>/dev/null |
         awk '{$1=$1; print}' |
         grep -Fxq "$swap_path"; then
 
         error "'$swap_path' is not currently active as swap."
+
         pause
         return
     fi
 
+    ##################################################
     # Get swap information
-    swap_info=$(swapon --show \
+    ##################################################
+
+    swap_info=$(swapon \
+        --show \
         --bytes \
         --noheadings \
         --output=NAME,TYPE,SIZE,USED,PRIO |
         awk -v path="$swap_path" '$1 == path')
+
+    if [ -z "$swap_info" ]; then
+
+        error "Unable to read swap information."
+
+        pause
+        return
+    fi
 
     read -r name type size used priority <<< "$swap_info"
 
@@ -1088,11 +1214,26 @@ swap_information() {
     free_bytes=$((size - used))
     free_h=$(numfmt --to=iec "$free_bytes" 2>/dev/null)
 
+    ##################################################
+    # Determine fstab source
+    ##################################################
+
+    if ! fstab_source=$(get_swap_fstab_source "$swap_path"); then
+
+        fstab_source="$swap_path"
+
+    fi
+
+    ##################################################
     # Check persistence
-    if awk -v path="$swap_path" '
+    ##################################################
+
+    if awk -v source="$fstab_source" '
         /^[[:space:]]*#/ {next}
 
-        NF >= 3 && $1 == path && $3 == "swap" {
+        NF >= 3 &&
+        $1 == source &&
+        $3 == "swap" {
             found=1
         }
 
@@ -1102,9 +1243,16 @@ swap_information() {
     ' /etc/fstab; then
 
         persistent="Yes"
+
     else
+
         persistent="No"
+
     fi
+
+    ##################################################
+    # Display information
+    ##################################################
 
     echo
     echo "========================================"
@@ -1120,15 +1268,22 @@ swap_information() {
     echo "Active      : Yes"
     echo "Persistent  : $persistent"
 
+    if [ "$persistent" = "Yes" ]; then
+        echo "FSTAB Source: $fstab_source"
+    fi
+
     if [ -f "$swap_path" ]; then
+
         echo "Permission  : $(stat -c "%a" -- "$swap_path")"
         echo "Owner       : $(stat -c "%U" -- "$swap_path")"
+
     fi
 
     echo "========================================"
 
     pause
 }
+
 
 
 ##################################################

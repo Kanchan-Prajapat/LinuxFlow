@@ -261,20 +261,37 @@ allow_port() {
 
         Y|y)
 
-            if firewall-cmd \
-                --permanent \
-                --zone="$zone" \
-                --add-port="${port}/${protocol}" >/dev/null; then
+           if firewall-cmd \
+    --permanent \
+    --zone="$zone" \
+    --add-port="${port}/${protocol}" >/dev/null 2>&1; then
 
-                if firewall-cmd --reload >/dev/null; then
-                    success "Port ${port}/${protocol} allowed successfully in zone '$zone'."
-                else
-                    error "Rule was saved but firewall reload failed."
-                fi
+    if firewall-cmd --reload >/dev/null; then
 
-            else
-                error "Failed to allow port."
-            fi
+        success "Port ${port}/${protocol} allowed successfully in zone '$zone'."
+
+    else
+
+        error "Firewall reload failed."
+        warning "Rolling back firewall change..."
+
+        firewall-cmd \
+            --permanent \
+            --zone="$zone" \
+            --remove-port="${port}/${protocol}" \
+            >/dev/null 2>&1
+
+        firewall-cmd --reload >/dev/null 2>&1
+
+        warning "Firewall rule rollback attempted."
+
+    fi
+
+else
+
+    error "Failed to allow port."
+
+fi
             ;;
 
         N|n)
@@ -494,10 +511,11 @@ allow_service() {
 
         Y|y)
 
-            if firewall-cmd \
-                --permanent \
-                --zone="$zone" \
-                --add-service="$service" >/dev/null; then
+            firewall-cmd \
+    --permanent \
+    --zone="$zone" \
+    --add-service="$service" \
+    >/dev/null 2>&1; then
 
                 if firewall-cmd --reload >/dev/null; then
                     success "Service '$service' allowed successfully in zone '$zone'."
@@ -595,10 +613,11 @@ remove_service() {
 
         Y|y)
 
-            if firewall-cmd \
-                --permanent \
-                --zone="$zone" \
-                --remove-service="$service" >/dev/null; then
+           firewall-cmd \
+    --permanent \
+    --zone="$zone" \
+    --remove-service="$service" \
+    >/dev/null 2>&1; then
 
                 if firewall-cmd --reload >/dev/null; then
                     success "Service '$service' removed successfully."

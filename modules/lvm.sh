@@ -109,6 +109,34 @@ create_physical_volume() {
         return
     fi
 
+    if command -v wipefs &>/dev/null; then
+
+    if [ -n "$(wipefs -n "$device" 2>/dev/null)" ]; then
+
+        error "'$device' contains an existing storage signature."
+        warning "LinuxFlow will not initialize this device as an LVM physical volume."
+
+        pause
+        return
+    fi
+
+fi
+
+
+##################################################
+# Protect devices with mounted child partitions
+##################################################
+
+if lsblk -nrpo NAME,MOUNTPOINTS "$device" 2>/dev/null |
+   awk 'NF > 1 {found=1} END {exit !found}'; then
+
+    error "'$device' or one of its child devices is mounted."
+    warning "Unmount all related filesystems before creating a physical volume."
+
+    pause
+    return
+fi
+
     echo
     warning "This operation will write LVM metadata to '$device'."
     echo

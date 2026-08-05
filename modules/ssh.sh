@@ -135,7 +135,6 @@ get_current_ssh_port() {
 
 
 
-
 ##################################################
 # Function : change_ssh_port
 # Purpose  : Safely change SSH server port
@@ -170,7 +169,7 @@ change_ssh_port() {
     fi
 
     ##################################################
-    # Validate existing configuration
+    # Validate current SSH configuration
     ##################################################
 
     if ! sshd -t; then
@@ -199,7 +198,7 @@ change_ssh_port() {
     fi
 
     ##################################################
-    # Check whether port is already in use
+    # Check whether new port is already in use
     ##################################################
 
     if ss -ltnH 2>/dev/null |
@@ -217,8 +216,9 @@ change_ssh_port() {
     echo
 
     warning "Changing the SSH port can affect remote access."
-    echo
+    warning "Keep the current SSH session open until the new port is tested."
 
+    echo
     read -p "Type YES to continue: " confirm
 
     if [ "$confirm" != "YES" ]; then
@@ -228,7 +228,7 @@ change_ssh_port() {
     fi
 
     ##################################################
-    # Backup configuration
+    # Backup SSH configuration
     ##################################################
 
     timestamp=$(date +"%Y%m%d_%H%M%S")
@@ -244,25 +244,53 @@ change_ssh_port() {
     echo "Backup : $backup_file"
 
     ##################################################
-    # Change Port directive
+    # Rollback tracking
     ##################################################
 
-    if grep -Eq '^[[:space:]]*Port[[:space:]]+' "$config_file"; then
+    firewall_port_added=0
+    selinux_port_added=0
+    firewall_zone=""
 
-        sed -i -E \
+    ##################################################
+    # Modify Port directive
+    ##################################################
+
+    if grep -Eq \
+        '^[[:space:]]*Port[[:space:]]+' \
+        "$config_file"; then
+
+        if ! sed -i -E \
             "s/^[[:space:]]*Port[[:space:]]+.*/Port ${new_port}/" \
-            "$config_file"
+            "$config_file"; then
+
+            error "Failed to update SSH configuration."
+
+            cp -a "$backup_file" "$config_file"
+
+            pause
+            return
+        fi
 
     else
 
-        echo >> "$config_file"
-        echo "# Managed by LinuxFlow" >> "$config_file"
-        echo "Port ${new_port}" >> "$config_file"
+        if ! {
+            echo
+            echo "# Managed by LinuxFlow"
+            echo "Port ${new_port}"
+        } >> "$config_file"; then
+
+            error "Failed to update SSH configuration."
+
+            cp -a "$backup_file" "$config_file"
+
+            pause
+            return
+        fi
 
     fi
 
     ##################################################
-    # Validate new SSH configuration
+    # Validate modified SSH configuration
     ##################################################
 
     echo
@@ -292,9 +320,9 @@ change_ssh_port() {
     if systemctl is-active --quiet firewalld &&
        command -v firewall-cmd &>/dev/null; then
 
-        zone=$(get_firewall_zone 2>/dev/null)
+        firewall_zone=$(get_firewall_zone 2>/dev/null)
 
-        if [ -z "$zone" ]; then
+        if [ -z "$firewall_zone" ]; then
 
             error "Unable to determine firewall zone."
             warning "Restoring previous SSH configuration."
@@ -306,18 +334,18 @@ change_ssh_port() {
         fi
 
         echo
-        echo "Firewall Zone : $zone"
+        echo "Firewall Zone : $firewall_zone"
 
         if ! firewall-cmd \
             --permanent \
-            --zone="$zone" \
+            --zone="$firewall_zone" \
             --query-port="${new_port}/tcp" &>/dev/null; then
 
             echo "Allowing new SSH port through firewall..."
 
             if ! firewall-cmd \
                 --permanent \
-                --zone="$zone" \
+                --zone="$firewall_zone" \
                 --add-port="${new_port}/tcp" >/dev/null; then
 
                 error "Failed to add new SSH port to firewall."
@@ -329,16 +357,26 @@ change_ssh_port() {
                 return
             fi
 
+            firewall_port_added=1
+
+            ##################################################
+            # Reload firewall
+            ##################################################
+
             if ! firewall-cmd --reload >/dev/null; then
 
                 error "Firewall reload failed."
+                warning "Rolling back firewall configuration..."
 
                 firewall-cmd \
                     --permanent \
-                    --zone="$zone" \
-                    --remove-port="${new_port}/tcp" >/dev/null 2>&1
+                    --zone="$firewall_zone" \
+                    --remove-port="${new_port}/tcp" \
+                    >/dev/null 2>&1
 
                 firewall-cmd --reload >/dev/null 2>&1
+
+                firewall_port_added=0
 
                 cp -a "$backup_file" "$config_file"
 
@@ -349,16 +387,23 @@ change_ssh_port() {
             fi
 
             success "Firewall port ${new_port}/tcp allowed."
+
+        else
+
+            echo
+            success "Firewall already allows port ${new_port}/tcp."
+
         fi
+
     else
 
         echo
         warning "Firewalld is not active."
         warning "Make sure port ${new_port}/tcp is allowed by your firewall."
+
     fi
 
-
-        ##################################################
+    ##################################################
     # SELinux SSH port handling
     ##################################################
 
@@ -368,11 +413,34 @@ change_ssh_port() {
         echo
         echo "SELinux Status : Enforcing"
 
+        ##################################################
+        # semanage must be available
+        ##################################################
+
         if ! command -v semanage &>/dev/null; then
 
             error "SELinux is enforcing but 'semanage' is not available."
             warning "Install policycoreutils-python-utils before changing SSH port."
-            warning "Restoring previous SSH configuration..."
+            warning "Rolling back changes..."
+
+            ##################################################
+            # Firewall rollback
+            ##################################################
+
+            if [ "$firewall_port_added" -eq 1 ]; then
+
+                firewall-cmd \
+                    --permanent \
+                    --zone="$firewall_zone" \
+                    --remove-port="${new_port}/tcp" \
+                    >/dev/null 2>&1
+
+                firewall-cmd --reload >/dev/null 2>&1
+            fi
+
+            ##################################################
+            # SSH configuration rollback
+            ##################################################
 
             cp -a "$backup_file" "$config_file"
 
@@ -380,8 +448,11 @@ change_ssh_port() {
             return
         fi
 
-        # Check whether new port is already allowed for SSH
-        if ! semanage port -l |
+        ##################################################
+        # Check whether SELinux already allows port
+        ##################################################
+
+        if ! semanage port -l 2>/dev/null |
             awk '$1 == "ssh_port_t" {print}' |
             grep -Eq "(^|[ ,])${new_port}([ ,]|$)"; then
 
@@ -391,23 +462,49 @@ change_ssh_port() {
                 -t ssh_port_t \
                 -p tcp "$new_port"; then
 
+                selinux_port_added=1
+
                 success "SELinux SSH port policy updated."
 
             else
 
                 error "Failed to add SSH port to SELinux policy."
-                warning "Restoring previous SSH configuration..."
+                warning "Rolling back changes..."
+
+                ##################################################
+                # Firewall rollback
+                ##################################################
+
+                if [ "$firewall_port_added" -eq 1 ]; then
+
+                    firewall-cmd \
+                        --permanent \
+                        --zone="$firewall_zone" \
+                        --remove-port="${new_port}/tcp" \
+                        >/dev/null 2>&1
+
+                    firewall-cmd --reload >/dev/null 2>&1
+                fi
+
+                ##################################################
+                # SSH configuration rollback
+                ##################################################
 
                 cp -a "$backup_file" "$config_file"
 
                 pause
                 return
             fi
+
+        else
+
+            success "SELinux already allows SSH on port $new_port."
+
         fi
     fi
 
     ##################################################
-    # Reload SSH
+    # Restart SSH service
     ##################################################
 
     echo
@@ -415,26 +512,46 @@ change_ssh_port() {
 
     if ! systemctl restart "$ssh_service"; then
 
-        error "Failed to reload SSH service."
-        warning "Restoring previous configuration..."
+        error "Failed to restart SSH service."
+        warning "Rolling back changes..."
+
+        ##################################################
+        # Restore SSH configuration
+        ##################################################
 
         cp -a "$backup_file" "$config_file"
 
-        systemctl restart "$ssh_service" 2>/dev/null
+        ##################################################
+        # SELinux rollback
+        ##################################################
 
-        pause
-        return
-    fi
+        if [ "$selinux_port_added" -eq 1 ]; then
 
-    ##################################################
-    # Verify service
-    ##################################################
+            semanage port -d \
+                -t ssh_port_t \
+                -p tcp "$new_port" \
+                >/dev/null 2>&1
+        fi
 
-    if ! systemctl is-active --quiet "$ssh_service"; then
+        ##################################################
+        # Firewall rollback
+        ##################################################
 
-        error "SSH service is not active after configuration change."
+        if [ "$firewall_port_added" -eq 1 ]; then
 
-        cp -a "$backup_file" "$config_file"
+            firewall-cmd \
+                --permanent \
+                --zone="$firewall_zone" \
+                --remove-port="${new_port}/tcp" \
+                >/dev/null 2>&1
+
+            firewall-cmd --reload >/dev/null 2>&1
+        fi
+
+        ##################################################
+        # Restore previous SSH service state
+        ##################################################
+
         systemctl restart "$ssh_service" 2>/dev/null
 
         warning "Previous SSH configuration restored."
@@ -444,32 +561,110 @@ change_ssh_port() {
     fi
 
     ##################################################
-    # Verify listening port
+    # Verify SSH service
     ##################################################
 
-    sleep 1
+    if ! systemctl is-active --quiet "$ssh_service"; then
 
-    if ss -ltnH 2>/dev/null |
-        awk '{print $4}' |
-        grep -Eq "[:.]${new_port}$"; then
-
-        success "SSH port changed successfully."
-
-        echo
-        echo "Old SSH Port : $current_port"
-        echo "New SSH Port : $new_port"
-
-    else
-
-        error "SSH is not listening on the expected port '$new_port'."
-        warning "Restoring previous SSH configuration..."
+        error "SSH service is not active after configuration change."
+        warning "Rolling back changes..."
 
         cp -a "$backup_file" "$config_file"
+
+        if [ "$selinux_port_added" -eq 1 ]; then
+
+            semanage port -d \
+                -t ssh_port_t \
+                -p tcp "$new_port" \
+                >/dev/null 2>&1
+        fi
+
+        if [ "$firewall_port_added" -eq 1 ]; then
+
+            firewall-cmd \
+                --permanent \
+                --zone="$firewall_zone" \
+                --remove-port="${new_port}/tcp" \
+                >/dev/null 2>&1
+
+            firewall-cmd --reload >/dev/null 2>&1
+        fi
+
         systemctl restart "$ssh_service" 2>/dev/null
+
+        warning "Previous SSH configuration restored."
 
         pause
         return
     fi
+
+    ##################################################
+    # Verify SSH listening port
+    ##################################################
+
+    sleep 1
+
+    if ! ss -ltnH 2>/dev/null |
+        awk '{print $4}' |
+        grep -Eq "[:.]${new_port}$"; then
+
+        error "SSH is not listening on the expected port '$new_port'."
+        warning "Rolling back changes..."
+
+        ##################################################
+        # Restore SSH configuration
+        ##################################################
+
+        cp -a "$backup_file" "$config_file"
+
+        ##################################################
+        # SELinux rollback
+        ##################################################
+
+        if [ "$selinux_port_added" -eq 1 ]; then
+
+            semanage port -d \
+                -t ssh_port_t \
+                -p tcp "$new_port" \
+                >/dev/null 2>&1
+        fi
+
+        ##################################################
+        # Firewall rollback
+        ##################################################
+
+        if [ "$firewall_port_added" -eq 1 ]; then
+
+            firewall-cmd \
+                --permanent \
+                --zone="$firewall_zone" \
+                --remove-port="${new_port}/tcp" \
+                >/dev/null 2>&1
+
+            firewall-cmd --reload >/dev/null 2>&1
+        fi
+
+        ##################################################
+        # Restart old SSH configuration
+        ##################################################
+
+        systemctl restart "$ssh_service" 2>/dev/null
+
+        warning "Previous SSH configuration restored."
+
+        pause
+        return
+    fi
+
+    ##################################################
+    # Success
+    ##################################################
+
+    success "SSH port changed successfully."
+
+    echo
+    echo "Old SSH Port : $current_port"
+    echo "New SSH Port : $new_port"
 
     echo
     warning "IMPORTANT:"
@@ -487,8 +682,6 @@ change_ssh_port() {
 
     pause
 }
-
-
 
 
 

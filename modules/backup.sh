@@ -4,14 +4,6 @@
 # Backup Management Module
 ############################################
 
-##################################################
-# Function : generate_backup_name
-# Purpose  : Generate unique backup filename
-##################################################
-
-BACKUP_DIR="./backups"
-
-
 
 ##################################################
 # Function : has_backups
@@ -60,10 +52,26 @@ validate_backup_filename() {
 }
 
 
+##################################################
+# Function : generate_backup_name
+# Purpose  : Generate unique backup filename
+##################################################
+
 generate_backup_name() {
 
-    date +"backup_%Y%m%d_%H%M%S.tar.gz"
+    local timestamp
+    local backup_name
+    local counter=1
 
+    timestamp=$(date +"%Y%m%d_%H%M%S")
+    backup_name="backup_${timestamp}.tar.gz"
+
+    while [ -e "$BACKUP_DIR/$backup_name" ]; do
+        backup_name="backup_${timestamp}_${counter}.tar.gz"
+        ((counter++))
+    done
+
+    echo "$backup_name"
 }
 
 ##################################################
@@ -108,6 +116,23 @@ create_backup() {
         pause
         return
     fi
+
+    resolved_backup_dir=$(realpath "$BACKUP_DIR" 2>/dev/null)
+
+if [ -z "$resolved_backup_dir" ]; then
+    error "Unable to resolve backup directory."
+    pause
+    return
+fi
+
+case "$resolved_backup_dir/" in
+    "$source_dir/"*)
+        error "Backup directory is located inside the source directory."
+        warning "Choose a source that does not contain '$resolved_backup_dir'."
+        pause
+        return
+        ;;
+esac
 
     backup_name=$(generate_backup_name)
 
@@ -307,6 +332,12 @@ list_backup() {
 
     echo "========== Backup List =========="
     echo
+
+    if ! has_backups; then
+    warning "No backups available."
+    pause
+    return
+fi
 
     if [ ! -d "$BACKUP_DIR" ] || [ -z "$(ls -A "$BACKUP_DIR")" ]; then
         warning "No backups available."

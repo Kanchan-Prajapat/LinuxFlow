@@ -5,7 +5,16 @@
 ############################################
 
 # Load Configuration
-source ./config/linuxflow.conf
+if [ -f "./config/linuxflow.conf" ]; then
+
+    source ./config/linuxflow.conf
+
+else
+
+    echo "ERROR: LinuxFlow configuration file not found."
+    exit 1
+
+fi
 
 ############################################
 # Colors
@@ -40,10 +49,16 @@ log_activity() {
 
     if [ "$ENABLE_LOGGING" = true ]; then
 
-        echo "$(date +"$DATE_FORMAT") | USER=$USER | HOST=$(hostname) | $1" >> "$LOG_FILE"
+        log_dir=$(dirname "$LOG_FILE")
+
+        if [ ! -d "$log_dir" ]; then
+            mkdir -p "$log_dir" 2>/dev/null
+        fi
+
+        echo "$(date +"$DATE_FORMAT") | USER=$(whoami) | HOST=$(hostname) | $1" \
+            >> "$LOG_FILE" 2>/dev/null
 
     fi
-
 }
 
 ############################################
@@ -52,7 +67,7 @@ log_activity() {
 
 header() {
 
-    clear
+    clear_screen
 
     echo -e "${CYAN}"
     echo "==============================================================="

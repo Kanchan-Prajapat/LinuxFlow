@@ -25,11 +25,10 @@ view_acl() {
 
     read -p "Enter file/directory path: " filepath
 
-    if ! validate_file "$filepath"; then
-        pause
-        return
-    fi
-
+ if ! validate_acl_target "$filepath"; then
+    pause
+    return
+fi
     echo
     echo "========== ACL Information =========="
     echo
@@ -131,8 +130,25 @@ set_user_acl() {
         return
     fi
 
+    current_acl=$(getfacl -cp -- "$filepath" 2>/dev/null |
+    awk -F: -v user="$username" \
+    '$1=="user" && $2==user {print $3; exit}')
+
+echo
+echo "Target      : $filepath"
+echo "User        : $username"
+
+if [ -n "$current_acl" ]; then
+    echo "Current ACL : $current_acl"
+else
+    echo "Current ACL : None"
+fi
+
+echo "New ACL     : $permission"
+echo
+
     echo
-    read -p "Set '$permission' ACL for user '$username'? (Y/N): " confirm
+    read -p "Apply this ACL? (Y/N): " confirm
 
     case "$confirm" in
 
@@ -202,21 +218,21 @@ set_group_acl() {
     fi
 
     current_acl=$(getfacl -cp -- "$filepath" 2>/dev/null |
-        awk -F: -v group="$groupname" \
-        '$1=="group" && $2==group {print $3; exit}')
+    awk -F: -v user="$username" \
+    '$1=="user" && $2==user {print $3; exit}')
 
-    echo
-    echo "Target     : $filepath"
-    echo "Group      : $groupname"
+echo
+echo "Target      : $filepath"
+echo "User        : $username"
 
-    if [ -n "$current_acl" ]; then
-        echo "Current ACL: $current_acl"
-    else
-        echo "Current ACL: None"
-    fi
+if [ -n "$current_acl" ]; then
+    echo "Current ACL : $current_acl"
+else
+    echo "Current ACL : None"
+fi
 
-    echo "New ACL    : $permission"
-    echo
+echo "New ACL     : $permission"
+echo
 
     read -p "Apply this ACL? (Y/N): " confirm
 

@@ -411,7 +411,7 @@ fi
 
  case "$confirm" in
 
-        Y|y)
+    Y|y)
 
         if passwd "$username"; then
             success "Password reset successfully for user '$username'."
@@ -420,7 +420,17 @@ fi
         fi
         ;;
 
-    esac
+    N|n)
+
+        warning "Operation cancelled."
+        ;;
+
+    *)
+
+        error "Invalid choice."
+        ;;
+
+esac
 
     pause
 }
