@@ -239,6 +239,10 @@ allow_port() {
             ;;
     esac
 
+    ##################################################
+    # Check duplicate rule
+    ##################################################
+
     if firewall-cmd \
         --permanent \
         --zone="$zone" \
@@ -261,44 +265,64 @@ allow_port() {
 
         Y|y)
 
-           if firewall-cmd \
-    --permanent \
-    --zone="$zone" \
-    --add-port="${port}/${protocol}" >/dev/null 2>&1; then
+            ##################################################
+            # Add permanent firewall rule
+            ##################################################
 
-    if firewall-cmd --reload >/dev/null; then
+            if firewall-cmd \
+                --permanent \
+                --zone="$zone" \
+                --add-port="${port}/${protocol}" \
+                >/dev/null 2>&1; then
 
-        success "Port ${port}/${protocol} allowed successfully in zone '$zone'."
+                ##################################################
+                # Reload firewall
+                ##################################################
 
-    else
+                if firewall-cmd --reload >/dev/null 2>&1; then
 
-        error "Firewall reload failed."
-        warning "Rolling back firewall change..."
+                    success "Port ${port}/${protocol} allowed successfully in zone '$zone'."
 
-        firewall-cmd \
-            --permanent \
-            --zone="$zone" \
-            --remove-port="${port}/${protocol}" \
-            >/dev/null 2>&1
+                else
 
-        firewall-cmd --reload >/dev/null 2>&1
+                    error "Firewall reload failed."
+                    warning "Rolling back firewall change..."
 
-        warning "Firewall rule rollback attempted."
+                    ##################################################
+                    # Rollback added rule
+                    ##################################################
 
-    fi
+                    if firewall-cmd \
+                        --permanent \
+                        --zone="$zone" \
+                        --remove-port="${port}/${protocol}" \
+                        >/dev/null 2>&1; then
 
-else
+                        firewall-cmd --reload >/dev/null 2>&1
 
-    error "Failed to allow port."
+                        warning "Firewall rule rolled back."
 
-fi
+                    else
+
+                        error "Failed to rollback firewall rule."
+
+                    fi
+                fi
+
+            else
+
+                error "Failed to allow port."
+
+            fi
             ;;
 
         N|n)
+
             warning "Operation cancelled."
             ;;
 
         *)
+
             error "Invalid choice."
             ;;
 
@@ -306,7 +330,6 @@ fi
 
     pause
 }
-
 
 
 ##################################################
@@ -358,6 +381,10 @@ remove_port() {
             ;;
     esac
 
+    ##################################################
+    # Check whether rule exists
+    ##################################################
+
     if ! firewall-cmd \
         --permanent \
         --zone="$zone" \
@@ -385,6 +412,7 @@ remove_port() {
         read -p "Type YES to continue: " ssh_confirm
 
         if [ "$ssh_confirm" != "YES" ]; then
+
             warning "Operation cancelled."
             pause
             return
@@ -403,27 +431,64 @@ remove_port() {
 
         Y|y)
 
+            ##################################################
+            # Remove permanent rule
+            ##################################################
+
             if firewall-cmd \
                 --permanent \
                 --zone="$zone" \
-                --remove-port="${port}/${protocol}" >/dev/null; then
+                --remove-port="${port}/${protocol}" \
+                >/dev/null 2>&1; then
 
-                if firewall-cmd --reload >/dev/null; then
+                ##################################################
+                # Reload firewall
+                ##################################################
+
+                if firewall-cmd --reload >/dev/null 2>&1; then
+
                     success "Port ${port}/${protocol} removed successfully."
+
                 else
-                    error "Rule changed but firewall reload failed."
+
+                    error "Firewall reload failed."
+                    warning "Restoring removed firewall rule..."
+
+                    ##################################################
+                    # Rollback removed rule
+                    ##################################################
+
+                    if firewall-cmd \
+                        --permanent \
+                        --zone="$zone" \
+                        --add-port="${port}/${protocol}" \
+                        >/dev/null 2>&1; then
+
+                        firewall-cmd --reload >/dev/null 2>&1
+
+                        warning "Firewall rule restored."
+
+                    else
+
+                        error "Failed to restore firewall rule."
+
+                    fi
                 fi
 
             else
+
                 error "Failed to remove port."
+
             fi
             ;;
 
         N|n)
+
             warning "Operation cancelled."
             ;;
 
         *)
+
             error "Invalid choice."
             ;;
 
@@ -431,8 +496,6 @@ remove_port() {
 
     pause
 }
-
-
 
 
 ##################################################
@@ -494,6 +557,10 @@ allow_service() {
         return
     fi
 
+    ##################################################
+    # Check duplicate service
+    ##################################################
+
     if firewall-cmd \
         --permanent \
         --zone="$zone" \
@@ -511,28 +578,64 @@ allow_service() {
 
         Y|y)
 
-            firewall-cmd \
-    --permanent \
-    --zone="$zone" \
-    --add-service="$service" \
-    >/dev/null 2>&1; then
+            ##################################################
+            # Add permanent service
+            ##################################################
 
-                if firewall-cmd --reload >/dev/null; then
+            if firewall-cmd \
+                --permanent \
+                --zone="$zone" \
+                --add-service="$service" \
+                >/dev/null 2>&1; then
+
+                ##################################################
+                # Reload firewall
+                ##################################################
+
+                if firewall-cmd --reload >/dev/null 2>&1; then
+
                     success "Service '$service' allowed successfully in zone '$zone'."
+
                 else
-                    error "Service was added but firewall reload failed."
+
+                    error "Firewall reload failed."
+                    warning "Rolling back firewall service change..."
+
+                    ##################################################
+                    # Rollback added service
+                    ##################################################
+
+                    if firewall-cmd \
+                        --permanent \
+                        --zone="$zone" \
+                        --remove-service="$service" \
+                        >/dev/null 2>&1; then
+
+                        firewall-cmd --reload >/dev/null 2>&1
+
+                        warning "Firewall service rollback completed."
+
+                    else
+
+                        error "Failed to rollback firewall service."
+
+                    fi
                 fi
 
             else
+
                 error "Failed to allow service '$service'."
+
             fi
             ;;
 
         N|n)
+
             warning "Operation cancelled."
             ;;
 
         *)
+
             error "Invalid choice."
             ;;
 
@@ -577,6 +680,10 @@ remove_service() {
         return
     fi
 
+    ##################################################
+    # Check whether service is allowed
+    ##################################################
+
     if ! firewall-cmd \
         --permanent \
         --zone="$zone" \
@@ -600,6 +707,7 @@ remove_service() {
         read -p "Type YES to continue: " ssh_confirm
 
         if [ "$ssh_confirm" != "YES" ]; then
+
             warning "Operation cancelled."
             pause
             return
@@ -613,28 +721,64 @@ remove_service() {
 
         Y|y)
 
-           firewall-cmd \
-    --permanent \
-    --zone="$zone" \
-    --remove-service="$service" \
-    >/dev/null 2>&1; then
+            ##################################################
+            # Remove permanent service
+            ##################################################
 
-                if firewall-cmd --reload >/dev/null; then
+            if firewall-cmd \
+                --permanent \
+                --zone="$zone" \
+                --remove-service="$service" \
+                >/dev/null 2>&1; then
+
+                ##################################################
+                # Reload firewall
+                ##################################################
+
+                if firewall-cmd --reload >/dev/null 2>&1; then
+
                     success "Service '$service' removed successfully."
+
                 else
-                    error "Service was removed but firewall reload failed."
+
+                    error "Firewall reload failed."
+                    warning "Restoring removed firewall service..."
+
+                    ##################################################
+                    # Rollback removed service
+                    ##################################################
+
+                    if firewall-cmd \
+                        --permanent \
+                        --zone="$zone" \
+                        --add-service="$service" \
+                        >/dev/null 2>&1; then
+
+                        firewall-cmd --reload >/dev/null 2>&1
+
+                        warning "Firewall service restored."
+
+                    else
+
+                        error "Failed to restore firewall service."
+
+                    fi
                 fi
 
             else
+
                 error "Failed to remove service '$service'."
+
             fi
             ;;
 
         N|n)
+
             warning "Operation cancelled."
             ;;
 
         *)
+
             error "Invalid choice."
             ;;
 
@@ -642,8 +786,6 @@ remove_service() {
 
     pause
 }
-
-
 
 
 ##################################################
