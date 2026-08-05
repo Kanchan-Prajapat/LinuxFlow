@@ -248,7 +248,13 @@ disk_usage() {
         "--------------------" "----------" "----------" \
         "----------" "--------" "--------------------"
 
-    df -hP -x tmpfs -x devtmpfs 2>/dev/null |
+df -hP \
+    -x tmpfs \
+    -x devtmpfs \
+    -x iso9660 \
+    -x squashfs \
+    -x overlay \
+    2>/dev/null |
         awk 'NR > 1 {
             printf "%-20s %-10s %-10s %-10s %-8s %-20s\n",
             $1, $2, $3, $4, $5, $6
@@ -294,7 +300,13 @@ disk_usage() {
         fi
 
     done < <(
-        df -hP -x tmpfs -x devtmpfs 2>/dev/null |
+        df -hP \
+    -x tmpfs \
+    -x devtmpfs \
+    -x iso9660 \
+    -x squashfs \
+    -x overlay \
+    2>/dev/null |
         awk 'NR > 1 {print $1, $2, $3, $4, $5, $6}'
     )
 
@@ -418,10 +430,10 @@ system_load() {
     ##################################################
 
     load_percent=$(awk \
-        -v load="$load1" \
+        -v load_value="$load1" \
         -v cores="$cpu_cores" \
         'BEGIN {
-            printf "%.2f", (load / cores) * 100
+            printf "%.2f", (load_value / cores) * 100
         }')
 
     echo "Current Load     : ${load_percent}% of CPU capacity"
@@ -434,11 +446,11 @@ system_load() {
     ##################################################
 
     load_status=$(awk \
-        -v load="$load1" \
+        -v load_value="$load1" \
         -v cores="$cpu_cores" '
         BEGIN {
 
-            ratio = load / cores
+            ratio = load_value / cores
 
             if (ratio >= 1.5)
                 print "critical"
@@ -1150,16 +1162,24 @@ disk_io_statistics() {
             # Show only real top-level block devices
             ##################################################
 
-            if [ ! -e "/sys/block/$device" ]; then
-                continue
-            fi
+        if [ ! -e "/sys/block/$device" ]; then
+    continue
+fi
 
-            printf "%-12s %-15s %-15s %-15s %-15s\n" \
-                "$device" \
-                "$reads" \
-                "$read_sectors" \
-                "$writes" \
-                "$write_sectors"
+# Ignore virtual/optical devices
+case "$device" in
+    loop*|sr*|ram*)
+        continue
+        ;;
+esac
+
+printf "%-12s %-15s %-15s %-15s %-15s\n" \
+    "$device" \
+    "$reads" \
+    "$read_sectors" \
+    "$writes" \
+    "$write_sectors"
+
 
         done < /proc/diskstats
 
@@ -1184,13 +1204,20 @@ disk_io_statistics() {
         critical_util=0
 
         while read -r device util
-        do
+do
 
-            if [ -z "$device" ] || [ -z "$util" ]; then
-                continue
-            fi
+    if [ -z "$device" ] || [ -z "$util" ]; then
+        continue
+    fi
 
-            status=$(awk -v value="$util" '
+    # Ignore virtual / optical devices
+    case "$device" in
+        loop*|sr*|ram*)
+            continue
+            ;;
+    esac
+
+    status=$(awk -v value="$util" '
                 BEGIN {
 
                     if (value >= 90)
@@ -1225,6 +1252,7 @@ disk_io_statistics() {
 
             esac
 
+         
         done < <(
             iostat -dx 1 2 |
             awk '
@@ -1642,20 +1670,21 @@ logged_in_users() {
 
     if command -v lastb &>/dev/null; then
 
-        failed_logins=$(lastb -n 5 2>/dev/null)
+      failed_logins=$(lastb -n 5 2>/dev/null |
+    grep -v '^btmp begins' |
+    grep -v '^[[:space:]]*$')
 
-        if [ -n "$failed_logins" ]; then
+if [ -n "$failed_logins" ]; then
 
-            warning "Recent failed login attempts detected."
+    warning "Recent failed login attempts detected."
+    echo
+    echo "$failed_logins"
 
-            echo
-            echo "$failed_logins"
+else
 
-        else
+    success "No recent failed login attempts found."
 
-            success "No recent failed login attempts found."
-
-        fi
+fi
 
     else
 
@@ -1831,9 +1860,16 @@ system_health_summary() {
         fi
 
     done < <(
-        df -P -x tmpfs -x devtmpfs 2>/dev/null |
-        awk 'NR > 1 {print $5, $6}'
-    )
+    df -P \
+        -x tmpfs \
+        -x devtmpfs \
+        -x iso9660 \
+        -x squashfs \
+        -x overlay \
+        2>/dev/null |
+    awk 'NR > 1 {print $5, $6}'
+)
+
 
     if [ "$max_disk_usage" -ge 90 ]; then
 
@@ -1865,11 +1901,11 @@ system_health_summary() {
     read -r load1 load5 load15 _ < /proc/loadavg
 
     load_status=$(awk \
-        -v load="$load1" \
+        -v load_value="$load1" \
         -v cores="$cpu_cores" '
         BEGIN {
 
-            ratio=load/cores
+            ratio=load_value /cores
 
             if (ratio >= 1.5)
                 print "CRITICAL"
