@@ -19,6 +19,7 @@ source ./modules/lvm.sh
 source ./modules/swap.sh
 source ./modules/ssh.sh
 source ./modules/cron.sh
+source ./modules/monitoring.sh
 ############################################
 # Application Started
 ############################################
@@ -135,8 +136,7 @@ cron_menu
 13)
 
 echo
-echo "Monitoring Module Coming Soon"
-pause
+monitoring_menu
 ;;
 
 14)
