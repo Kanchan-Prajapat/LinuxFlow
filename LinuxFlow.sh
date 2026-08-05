@@ -20,6 +20,7 @@ source ./modules/swap.sh
 source ./modules/ssh.sh
 source ./modules/cron.sh
 source ./modules/monitoring.sh
+source modules/reports.sh
 ############################################
 # Application Started
 ############################################
@@ -142,8 +143,7 @@ monitoring_menu
 14)
 
 echo
-echo "Reports Module Coming Soon"
-pause
+report_menu
 ;;
 
 0)
