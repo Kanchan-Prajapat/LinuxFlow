@@ -370,10 +370,130 @@ async function changeUserLockState(
 }
 
 
+async function deleteUser(req, res) {
+
+    try {
+
+        const { username } = req.params;
+
+        const {
+            removeHome = false,
+            confirmation
+        } = req.body || {};
+
+
+        if (
+            !/^[a-z_][a-z0-9_-]{0,31}$/.test(username)
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid username"
+            });
+        }
+
+
+        if (typeof removeHome !== "boolean") {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "removeHome must be true or false"
+            });
+        }
+
+
+        // Explicit confirmation required
+        const expectedConfirmation =
+            removeHome
+                ? `DELETE ${username} AND HOME`
+                : `DELETE ${username}`;
+
+
+        if (confirmation !== expectedConfirmation) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid deletion confirmation",
+                requiredConfirmation:
+                    expectedConfirmation
+            });
+        }
+
+
+        const result =
+            await userService.deleteUser(
+                username,
+                removeHome
+            );
+
+
+        if (!result.success) {
+
+            if (result.type === "not-found") {
+
+                return res.status(404).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            if (
+                result.type === "protected" ||
+                result.type === "logged-in"
+            ) {
+
+                return res.status(403).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            return res.status(500).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+
+        return res.status(200).json({
+            success: true,
+            message:
+                `User '${username}' deleted successfully`,
+            data: {
+                username:
+                    result.username,
+                homeDirectory:
+                    result.homeDirectory,
+                homeRemoved:
+                    result.homeRemoved
+            }
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Delete user error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to delete user"
+        });
+    }
+}
+
 module.exports = {
     getUsers,
     getUserByUsername,
      createUser,
-    changeUserLockState
+    changeUserLockState,
+    deleteUser
 
 };

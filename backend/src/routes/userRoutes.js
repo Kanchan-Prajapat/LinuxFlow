@@ -41,6 +41,9 @@ router.get(
     userController.getUserByUsername
 );
 
-
+router.delete(
+    "/:username",
+    userController.deleteUser
+);
 
 module.exports = router;
