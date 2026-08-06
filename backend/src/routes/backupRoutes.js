@@ -24,4 +24,15 @@ router.post(
 );
 
 
+router.post(
+    "/:filename/restore",
+    backupController.restoreBackup
+);
+
+
+router.delete(
+    "/:filename",
+    backupController.deleteBackup
+);
+
 module.exports = router;
