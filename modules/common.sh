@@ -5,9 +5,9 @@
 ############################################
 
 # Load Configuration
-if [ -f "./config/linuxflow.conf" ]; then
+if [ -f "$SCRIPT_DIR/config/linuxflow.conf" ]; then
 
-    source ./config/linuxflow.conf
+    source "$SCRIPT_DIR/config/linuxflow.conf"
 
 else
 

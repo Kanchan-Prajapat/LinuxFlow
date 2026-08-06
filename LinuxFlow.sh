@@ -1,26 +1,40 @@
 #!/bin/bash
 
 ############################################
+# LinuxFlow Base Directory
+############################################
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -z "$SCRIPT_DIR" ] || [ ! -d "$SCRIPT_DIR" ]; then
+    echo "[ERROR] Unable to determine LinuxFlow installation directory."
+    exit 1
+fi
+
+############################################
 # LinuxFlow
 ############################################
 
-# Load Common Library
-source ./modules/common.sh || exit 1
-source ./modules/user.sh || exit 1
-source ./modules/group.sh || exit 1
-source ./utils/logger.sh || exit 1
-source ./modules/backup.sh || exit 1
-source ./modules/permission.sh || exit 1
-source ./modules/process.sh || exit 1
-source ./modules/service.sh || exit 1
-source ./modules/firewall.sh || exit 1
-source ./modules/acl.sh || exit 1
-source ./modules/lvm.sh || exit 1
-source ./modules/swap.sh || exit 1
-source ./modules/ssh.sh || exit 1
-source ./modules/cron.sh || exit 1
-source ./modules/monitoring.sh || exit 1
-source ./modules/reports.sh || exit 1
+############################################
+# Load LinuxFlow Components
+############################################
+
+source "$SCRIPT_DIR/modules/common.sh"
+source "$SCRIPT_DIR/modules/user.sh"
+source "$SCRIPT_DIR/modules/group.sh"
+source "$SCRIPT_DIR/utils/logger.sh"
+source "$SCRIPT_DIR/modules/backup.sh"
+source "$SCRIPT_DIR/modules/permission.sh"
+source "$SCRIPT_DIR/modules/process.sh"
+source "$SCRIPT_DIR/modules/service.sh"
+source "$SCRIPT_DIR/modules/firewall.sh"
+source "$SCRIPT_DIR/modules/acl.sh"
+source "$SCRIPT_DIR/modules/lvm.sh"
+source "$SCRIPT_DIR/modules/swap.sh"
+source "$SCRIPT_DIR/modules/ssh.sh"
+source "$SCRIPT_DIR/modules/cron.sh"
+source "$SCRIPT_DIR/modules/monitoring.sh"
+source "$SCRIPT_DIR/modules/reports.sh"
 
 
 ##################################################
