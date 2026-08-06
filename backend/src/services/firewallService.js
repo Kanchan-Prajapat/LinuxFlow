@@ -324,10 +324,274 @@ async function getServices() {
         .filter(Boolean);
 }
 
+function isValidPort(port) {
+
+    const number = Number(port);
+
+    return (
+        Number.isInteger(number) &&
+        number >= 1 &&
+        number <= 65535
+    );
+}
+
+
+function isValidProtocol(protocol) {
+
+    return (
+        protocol === "tcp" ||
+        protocol === "udp"
+    );
+}
+
+
+async function isPortEnabled(
+    zone,
+    port,
+    protocol,
+    permanent = false
+) {
+
+    const args = [];
+
+    if (permanent) {
+        args.push("--permanent");
+    }
+
+    args.push(
+        "--zone",
+        zone,
+        "--query-port",
+        `${port}/${protocol}`
+    );
+
+
+    try {
+
+        const output =
+            await runFirewallCommand(args);
+
+        return output === "yes";
+
+    } catch (error) {
+
+        /*
+         * firewall-cmd --query-port returns
+         * non-zero when the answer is "no".
+         */
+
+        if (
+            String(error.stdout || "")
+                .trim() === "no"
+        ) {
+            return false;
+        }
+
+        throw error;
+    }
+}
+
+
+async function addPort(
+    zone,
+    port,
+    protocol
+) {
+
+    if (
+        !isValidPort(port) ||
+        !isValidProtocol(protocol)
+    ) {
+
+        return {
+            success: false,
+            type: "invalid",
+            message:
+                "Invalid firewall port or protocol"
+        };
+    }
+
+
+    const portRule =
+        `${port}/${protocol}`;
+
+
+    const alreadyPermanent =
+        await isPortEnabled(
+            zone,
+            port,
+            protocol,
+            true
+        );
+
+
+    if (alreadyPermanent) {
+
+        return {
+            success: false,
+            type: "exists",
+            message:
+                `Port '${portRule}' is already enabled in zone '${zone}'`
+        };
+    }
+
+
+    try {
+
+        // Permanent configuration
+        await runFirewallCommand([
+            "--permanent",
+            "--zone",
+            zone,
+            "--add-port",
+            portRule
+        ]);
+
+
+        // Runtime configuration
+        await runFirewallCommand([
+            "--zone",
+            zone,
+            "--add-port",
+            portRule
+        ]);
+
+
+        return {
+            success: true,
+            data: {
+                zone,
+                port: Number(port),
+                protocol,
+                rule: portRule
+            }
+        };
+
+
+    } catch (error) {
+
+        /*
+         * Roll back permanent config if
+         * runtime update failed.
+         */
+
+        try {
+
+            await runFirewallCommand([
+                "--permanent",
+                "--zone",
+                zone,
+                "--remove-port",
+                portRule
+            ]);
+
+        } catch (_) {}
+
+
+        throw error;
+    }
+}
+
+
+async function removePort(
+    zone,
+    port,
+    protocol
+) {
+
+    if (
+        !isValidPort(port) ||
+        !isValidProtocol(protocol)
+    ) {
+
+        return {
+            success: false,
+            type: "invalid",
+            message:
+                "Invalid firewall port or protocol"
+        };
+    }
+
+
+    const portRule =
+        `${port}/${protocol}`;
+
+
+    const permanentEnabled =
+        await isPortEnabled(
+            zone,
+            port,
+            protocol,
+            true
+        );
+
+
+    const runtimeEnabled =
+        await isPortEnabled(
+            zone,
+            port,
+            protocol,
+            false
+        );
+
+
+    if (
+        !permanentEnabled &&
+        !runtimeEnabled
+    ) {
+
+        return {
+            success: false,
+            type: "not-found",
+            message:
+                `Port '${portRule}' is not enabled in zone '${zone}'`
+        };
+    }
+
+
+    if (permanentEnabled) {
+
+        await runFirewallCommand([
+            "--permanent",
+            "--zone",
+            zone,
+            "--remove-port",
+            portRule
+        ]);
+    }
+
+
+    if (runtimeEnabled) {
+
+        await runFirewallCommand([
+            "--zone",
+            zone,
+            "--remove-port",
+            portRule
+        ]);
+    }
+
+
+    return {
+        success: true,
+
+        data: {
+            zone,
+            port: Number(port),
+            protocol,
+            rule: portRule
+        }
+    };
+}
+
+
+
 
 module.exports = {
     getFirewallStatus,
     getZones,
     getZoneDetails,
-    getServices
+    getServices,
+    addPort,
+    removePort
 };
