@@ -156,7 +156,6 @@ async function getDiskUsage() {
         "df",
         [
             "-B1",
-            "-T",
             "--output=source,fstype,size,used,avail,pcent,target",
             "-x", "tmpfs",
             "-x", "devtmpfs"
@@ -200,7 +199,7 @@ async function getDiskUsage() {
 
         const mountPoint = mountParts.join(" ");
 
-        // Ignore removable/pseudo filesystems
+        // Ignore pseudo/removable filesystems
         if (ignoredTypes.has(filesystemType)) {
             continue;
         }
@@ -211,6 +210,16 @@ async function getDiskUsage() {
 
         const usagePercent =
             Number(usage.replace("%", ""));
+
+        // Ignore malformed filesystem records
+        if (
+            !Number.isFinite(sizeBytes) ||
+            !Number.isFinite(usedBytes) ||
+            !Number.isFinite(availableBytes) ||
+            !Number.isFinite(usagePercent)
+        ) {
+            continue;
+        }
 
         let status = "normal";
 
@@ -240,6 +249,7 @@ async function getDiskUsage() {
 
     return filesystems;
 }
+
 
 
 async function getSystemHealth() {
