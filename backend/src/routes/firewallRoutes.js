@@ -41,4 +41,16 @@ router.delete(
     firewallController.removePort
 );
 
+
+router.post(
+    "/services",
+    firewallController.addService
+);
+
+
+router.delete(
+    "/services",
+    firewallController.removeService
+);
+
 module.exports = router;

@@ -584,7 +584,227 @@ async function removePort(
     };
 }
 
+async function serviceExists(service) {
 
+    const services =
+        await getServices();
+
+    return services.includes(service);
+}
+
+
+async function isServiceEnabled(
+    zone,
+    service,
+    permanent = false
+) {
+
+    const args = [];
+
+    if (permanent) {
+        args.push("--permanent");
+    }
+
+    args.push(
+        "--zone",
+        zone,
+        "--query-service",
+        service
+    );
+
+
+    try {
+
+        const output =
+            await runFirewallCommand(args);
+
+        return output === "yes";
+
+    } catch (error) {
+
+        if (
+            String(error.stdout || "")
+                .trim() === "no"
+        ) {
+            return false;
+        }
+
+        throw error;
+    }
+}
+
+
+async function addService(
+    zone,
+    service
+) {
+
+    const exists =
+        await serviceExists(service);
+
+
+    if (!exists) {
+
+        return {
+            success: false,
+            type: "invalid-service",
+            message:
+                `Firewall service '${service}' does not exist`
+        };
+    }
+
+
+    const permanentEnabled =
+        await isServiceEnabled(
+            zone,
+            service,
+            true
+        );
+
+
+    if (permanentEnabled) {
+
+        return {
+            success: false,
+            type: "exists",
+            message:
+                `Service '${service}' is already enabled in zone '${zone}'`
+        };
+    }
+
+
+    try {
+
+        await runFirewallCommand([
+            "--permanent",
+            "--zone",
+            zone,
+            "--add-service",
+            service
+        ]);
+
+
+        await runFirewallCommand([
+            "--zone",
+            zone,
+            "--add-service",
+            service
+        ]);
+
+
+        return {
+            success: true,
+
+            data: {
+                zone,
+                service
+            }
+        };
+
+
+    } catch (error) {
+
+        // Rollback permanent change
+        try {
+
+            await runFirewallCommand([
+                "--permanent",
+                "--zone",
+                zone,
+                "--remove-service",
+                service
+            ]);
+
+        } catch (_) {}
+
+
+        throw error;
+    }
+}
+
+
+async function removeService(
+    zone,
+    service
+) {
+
+    const exists =
+        await serviceExists(service);
+
+
+    if (!exists) {
+
+        return {
+            success: false,
+            type: "invalid-service",
+            message:
+                `Firewall service '${service}' does not exist`
+        };
+    }
+
+
+    const permanentEnabled =
+        await isServiceEnabled(
+            zone,
+            service,
+            true
+        );
+
+
+    const runtimeEnabled =
+        await isServiceEnabled(
+            zone,
+            service,
+            false
+        );
+
+
+    if (
+        !permanentEnabled &&
+        !runtimeEnabled
+    ) {
+
+        return {
+            success: false,
+            type: "not-found",
+            message:
+                `Service '${service}' is not enabled in zone '${zone}'`
+        };
+    }
+
+
+    if (permanentEnabled) {
+
+        await runFirewallCommand([
+            "--permanent",
+            "--zone",
+            zone,
+            "--remove-service",
+            service
+        ]);
+    }
+
+
+    if (runtimeEnabled) {
+
+        await runFirewallCommand([
+            "--zone",
+            zone,
+            "--remove-service",
+            service
+        ]);
+    }
+
+
+    return {
+        success: true,
+
+        data: {
+            zone,
+            service
+        }
+    };
+}
 
 
 module.exports = {
@@ -593,5 +813,7 @@ module.exports = {
     getZoneDetails,
     getServices,
     addPort,
-    removePort
+    removePort,
+       addService,
+    removeService
 };
