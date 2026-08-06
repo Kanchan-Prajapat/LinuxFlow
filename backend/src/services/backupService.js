@@ -287,8 +287,301 @@ async function getBackupByFilename(filename) {
 }
 
 
+function isValidBackupFilename(filename) {
+
+    return (
+        typeof filename === "string" &&
+        /^[a-zA-Z0-9._-]+\.tar\.gz$/.test(filename) &&
+        path.basename(filename) === filename
+    );
+}
+
+
+async function validateArchive(filename) {
+
+    const backupPath =
+        path.join(BACKUP_DIR, filename);
+
+    try {
+
+        const { stdout } =
+            await execFileAsync(
+                "tar",
+                ["-tzf", backupPath],
+                {
+                    timeout: 30000,
+                    maxBuffer: 5 * 1024 * 1024
+                }
+            );
+
+
+        const entries =
+            stdout
+                .split("\n")
+                .filter(Boolean);
+
+
+        for (const entry of entries) {
+
+            // Reject absolute archive paths
+            if (entry.startsWith("/")) {
+
+                return {
+                    success: false,
+                    message:
+                        "Archive contains an unsafe absolute path"
+                };
+            }
+
+
+            const normalized =
+                path.posix.normalize(entry);
+
+
+            // Reject directory traversal
+            if (
+                normalized === ".." ||
+                normalized.startsWith("../")
+            ) {
+
+                return {
+                    success: false,
+                    message:
+                        "Archive contains unsafe path traversal"
+                };
+            }
+        }
+
+
+        return {
+            success: true,
+            entries
+        };
+
+
+    } catch (error) {
+
+        if (error.code === "ENOENT") {
+
+            return {
+                success: false,
+                type: "not-found",
+                message:
+                    `Backup '${filename}' not found`
+            };
+        }
+
+
+        return {
+            success: false,
+            type: "invalid-archive",
+            message:
+                "Unable to validate backup archive"
+        };
+    }
+}
+
+
+async function restoreBackup(filename) {
+
+    if (!isValidBackupFilename(filename)) {
+
+        return {
+            success: false,
+            type: "invalid-filename",
+            message:
+                "Invalid backup filename"
+        };
+    }
+
+
+    const backupPath =
+        path.join(BACKUP_DIR, filename);
+
+
+    const validation =
+        await validateArchive(filename);
+
+
+    if (!validation.success) {
+        return validation;
+    }
+
+
+    await fs.mkdir(
+        RESTORE_DIR,
+        {
+            recursive: true,
+            mode: 0o700
+        }
+    );
+
+
+    const restoreName =
+        filename.replace(
+            /\.tar\.gz$/,
+            ""
+        );
+
+
+    const destination =
+        path.join(
+            RESTORE_DIR,
+            restoreName
+        );
+
+
+    // Never silently overwrite previous restore
+    if (await pathExists(destination)) {
+
+        return {
+            success: false,
+            type: "exists",
+            message:
+                `Restore destination '${destination}' already exists`
+        };
+    }
+
+
+    try {
+
+        await fs.mkdir(
+            destination,
+            {
+                recursive: false,
+                mode: 0o700
+            }
+        );
+
+
+        await execFileAsync(
+            "tar",
+            [
+                "-xzf",
+                backupPath,
+                "-C",
+                destination,
+                "--no-same-owner",
+                "--no-same-permissions"
+            ],
+            {
+                timeout: 120000,
+                maxBuffer: 5 * 1024 * 1024
+            }
+        );
+
+
+        return {
+            success: true,
+
+            restore: {
+                filename,
+                destination,
+                itemCount:
+                    validation.entries.length,
+                restoredAt:
+                    new Date().toISOString()
+            }
+        };
+
+
+    } catch (error) {
+
+        // Failed restore cleanup
+        try {
+            await fs.rm(
+                destination,
+                {
+                    recursive: true,
+                    force: true
+                }
+            );
+        } catch (_) {}
+
+
+        console.error(
+            "Restore error:",
+            error.stderr || error.message
+        );
+
+
+        return {
+            success: false,
+            type: "restore-error",
+            message:
+                "Unable to restore backup"
+        };
+    }
+}
+
+
+async function deleteBackup(filename) {
+
+    if (!isValidBackupFilename(filename)) {
+
+        return {
+            success: false,
+            type: "invalid-filename",
+            message:
+                "Invalid backup filename"
+        };
+    }
+
+
+    const backupPath =
+        path.join(
+            BACKUP_DIR,
+            filename
+        );
+
+
+    try {
+
+        const stats =
+            await fs.lstat(backupPath);
+
+
+        if (!stats.isFile()) {
+
+            return {
+                success: false,
+                type: "not-found",
+                message:
+                    `Backup '${filename}' not found`
+            };
+        }
+
+
+        await fs.unlink(backupPath);
+
+
+        return {
+            success: true,
+            filename
+        };
+
+
+    } catch (error) {
+
+        if (error.code === "ENOENT") {
+
+            return {
+                success: false,
+                type: "not-found",
+                message:
+                    `Backup '${filename}' not found`
+            };
+        }
+
+        throw error;
+    }
+}
+
 module.exports = {
     createBackup,
     getBackups,
-    getBackupByFilename
+    getBackupByFilename,
+    validateArchive,
+    deleteBackup,
+    restoreBackup
 };

@@ -1,4 +1,7 @@
 const path = require("path");
+const RESTORE_DIR =
+    "/var/lib/linuxflow/restores";
+
 
 const backupService =
     require("../services/backupService");
@@ -17,6 +20,18 @@ function validateSourcePath(sourcePath) {
     if (!path.posix.isAbsolute(sourcePath)) {
         return false;
     }
+
+    const normalized =
+    path.posix.resolve(sourcePath);
+
+if (
+    normalized === "/var/backups/linuxflow" ||
+    normalized.startsWith(
+        "/var/backups/linuxflow/"
+    )
+) {
+    return false;
+}
 
 
     if (sourcePath.includes("\0")) {
@@ -189,8 +204,191 @@ async function getBackupByFilename(req, res) {
 }
 
 
+
+
+async function restoreBackup(req, res) {
+
+    try {
+
+        const { filename } =
+            req.params;
+
+        const { confirmation } =
+            req.body || {};
+
+
+        const requiredConfirmation =
+            `RESTORE ${filename}`;
+
+
+        if (
+            confirmation !==
+            requiredConfirmation
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid restore confirmation",
+                requiredConfirmation
+            });
+        }
+
+
+        const result =
+            await backupService
+                .restoreBackup(filename);
+
+
+        if (!result.success) {
+
+            if (result.type === "not-found") {
+
+                return res.status(404).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            if (
+                result.type === "exists" ||
+                result.type === "invalid-filename" ||
+                result.type === "invalid-archive"
+            ) {
+
+                return res.status(400).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            return res.status(500).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+
+        return res.status(200).json({
+            success: true,
+            message:
+                "Backup restored successfully",
+            data: result.restore
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Restore controller error:",
+            error
+        );
+
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to restore backup"
+        });
+    }
+}
+
+
+async function deleteBackup(req, res) {
+
+    try {
+
+        const { filename } =
+            req.params;
+
+        const { confirmation } =
+            req.body || {};
+
+
+        const requiredConfirmation =
+            `DELETE ${filename}`;
+
+
+        if (
+            confirmation !==
+            requiredConfirmation
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid deletion confirmation",
+                requiredConfirmation
+            });
+        }
+
+
+        const result =
+            await backupService
+                .deleteBackup(filename);
+
+
+        if (!result.success) {
+
+            if (result.type === "not-found") {
+
+                return res.status(404).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            if (
+                result.type ===
+                "invalid-filename"
+            ) {
+
+                return res.status(400).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            return res.status(500).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+
+        return res.status(200).json({
+            success: true,
+            message:
+                `Backup '${filename}' deleted successfully`
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Delete backup error:",
+            error
+        );
+
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to delete backup"
+        });
+    }
+}
+
+
+
 module.exports = {
     createBackup,
     getBackups,
-    getBackupByFilename
+    getBackupByFilename,
+    restoreBackup,
+    deleteBackup
 };
