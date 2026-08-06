@@ -10,6 +10,9 @@ const userRoutes = require("./routes/userRoutes");
 const groupRoutes = require("./routes/groupRoutes");
 const permissionRoutes = require("./routes/permissionRoutes");
 const aclRoutes =require("./routes/aclRoutes");
+const backupRoutes = require("./routes/backupRoutes");
+
+
 
 app.use(cors());
 app.use(express.json());
@@ -20,6 +23,7 @@ app.use("/api/users",userRoutes);
 app.use( "/api/groups", groupRoutes);
 app.use( "/api/permissions", permissionRoutes);
 app.use( "/api/acl", aclRoutes);
+app.use( "/api/backups", backupRoutes);
 
 
 const PORT = process.env.PORT || 5000;
