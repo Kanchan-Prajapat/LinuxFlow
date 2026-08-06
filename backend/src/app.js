@@ -4,26 +4,18 @@ require("dotenv").config();
 
 const app = express();
 const systemRoutes = require("./routes/systemRoutes");
-const processRoutes =
-    require("./routes/processRoutes");
-const serviceRoutes =
-    require("./routes/serviceRoutes");
-const userRoutes =
-    require("./routes/userRoutes");
-
+const processRoutes = require("./routes/processRoutes");
+const serviceRoutes =require("./routes/serviceRoutes");
+const userRoutes = require("./routes/userRoutes");
+const groupRoutes = require("./routes/groupRoutes");
 
 app.use(cors());
 app.use(express.json());
 app.use("/api/system", systemRoutes);
 app.use("/api/processes", processRoutes);
-app.use(
-    "/api/services",
-    serviceRoutes
-);
-app.use(
-    "/api/users",
-    userRoutes
-);
+app.use( "/api/services", serviceRoutes);
+app.use("/api/users",userRoutes);
+app.use( "/api/groups", groupRoutes);
 
 const PORT = process.env.PORT || 5000;
 

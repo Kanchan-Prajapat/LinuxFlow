@@ -298,10 +298,154 @@ async function changeUserLockState(
 }
 
 
+async function deleteUser(
+    username,
+    removeHome = false
+) {
+
+    const user =
+        await getUserByUsername(username);
+
+
+    if (!user) {
+
+        return {
+            success: false,
+            type: "not-found",
+            message: `User '${username}' not found`
+        };
+    }
+
+
+    // Protect root
+    if (username === "root") {
+
+        return {
+            success: false,
+            type: "protected",
+            message: "Root user cannot be deleted"
+        };
+    }
+
+
+    // Protect account running LinuxFlow backend
+    try {
+
+        const currentUid =
+            process.getuid();
+
+        if (user.uid === currentUid) {
+
+            return {
+                success: false,
+                type: "protected",
+                message:
+                    "User running the LinuxFlow backend cannot be deleted"
+            };
+        }
+
+    } catch (error) {
+
+        // process.getuid may not exist on non-POSIX systems.
+        // LinuxFlow production backend runs on Linux.
+    }
+
+
+    // Check whether user has active login sessions
+    try {
+
+        const { stdout } =
+            await execFileAsync(
+                "who",
+                []
+            );
+
+        const loggedInUsers =
+            stdout
+                .split("\n")
+                .filter(Boolean)
+                .map(line =>
+                    line.trim().split(/\s+/)[0]
+                );
+
+
+        if (loggedInUsers.includes(username)) {
+
+            return {
+                success: false,
+                type: "logged-in",
+                message:
+                    `User '${username}' currently has an active login session`
+            };
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Unable to check login sessions:",
+            error.message
+        );
+
+        return {
+            success: false,
+            type: "safety-check-failed",
+            message:
+                "Unable to verify active user sessions"
+        };
+    }
+
+
+    const args = [];
+
+    if (removeHome) {
+        args.push("-r");
+    }
+
+    args.push(username);
+
+
+    try {
+
+        await execFileAsync(
+            "userdel",
+            args,
+            {
+                timeout: 15000
+            }
+        );
+
+
+        return {
+            success: true,
+            username,
+            homeDirectory:
+                user.homeDirectory,
+            homeRemoved:
+                removeHome
+        };
+
+
+    } catch (error) {
+
+        console.error(
+            "userdel error:",
+            error.stderr || error.message
+        );
+
+        return {
+            success: false,
+            type: "command-error",
+            message:
+                `Unable to delete user '${username}'`
+        };
+    }
+}
+
 
 module.exports = {
     getUsers,
     getUserByUsername,
        createUser,
-    changeUserLockState
+    changeUserLockState,
+       deleteUser
 };
