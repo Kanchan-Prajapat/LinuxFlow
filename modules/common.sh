@@ -16,6 +16,28 @@ else
 
 fi
 
+
+############################################
+# Initialize Runtime Directories
+############################################
+
+for dir in "$LOG_DIR" "$BACKUP_DIR" "$REPORT_DIR"
+do
+    if [ ! -d "$dir" ]; then
+        if ! mkdir -p "$dir"; then
+            echo "ERROR: Unable to create runtime directory: $dir"
+            exit 1
+        fi
+    fi
+done
+
+if [ "$ENABLE_LOGGING" = true ]; then
+    if ! touch "$LOG_FILE" 2>/dev/null; then
+        echo "ERROR: Unable to initialize log file: $LOG_FILE"
+        exit 1
+    fi
+fi
+
 ############################################
 # Colors
 ############################################
