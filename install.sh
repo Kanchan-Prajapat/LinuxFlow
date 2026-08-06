@@ -14,6 +14,7 @@ set -u
 APP_NAME="LinuxFlow"
 INSTALL_DIR="/opt/linuxflow"
 COMMAND_PATH="/usr/bin/linuxflow"
+PRESERVE_DIR="/var/lib/linuxflow"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -383,6 +384,102 @@ install_linuxflow() {
     success "LinuxFlow application files installed successfully."
 }
 
+
+############################################################
+# Restore Preserved Runtime Data
+############################################################
+
+restore_preserved_data() {
+
+    ########################################################
+    # Check for preserved data
+    ########################################################
+
+    if [ ! -d "$PRESERVE_DIR" ]; then
+        return 0
+    fi
+
+    local data_found=false
+
+    for dir in logs backups reports
+    do
+        if [ -d "$PRESERVE_DIR/$dir" ]; then
+            data_found=true
+            break
+        fi
+    done
+
+    if [ "$data_found" = false ]; then
+        return 0
+    fi
+
+    echo
+    warning "Preserved LinuxFlow data was detected."
+    echo
+    echo "Location:"
+    echo "    $PRESERVE_DIR"
+    echo
+
+    read -p "Restore preserved logs, backups and reports? (Y/N): " confirm
+
+    case "$confirm" in
+
+        Y|y)
+
+            info "Restoring preserved runtime data..."
+
+            for dir in logs backups reports
+            do
+
+                if [ -d "$PRESERVE_DIR/$dir" ]; then
+
+                    mkdir -p "$INSTALL_DIR/$dir"
+
+                    if ! cp -a "$PRESERVE_DIR/$dir/." \
+                        "$INSTALL_DIR/$dir/"; then
+
+                        error "Failed to restore '$dir'."
+                        exit 1
+                    fi
+
+                fi
+
+            done
+
+            success "Preserved runtime data restored successfully."
+
+            echo
+            read -p "Remove preserved copy from '$PRESERVE_DIR'? (Y/N): " cleanup
+
+            case "$cleanup" in
+
+                Y|y)
+
+                    if rm -rf -- "$PRESERVE_DIR"; then
+                        success "Preserved copy removed."
+                    else
+                        warning "Unable to remove preserved copy."
+                    fi
+                    ;;
+
+                *)
+
+                    info "Preserved copy retained at $PRESERVE_DIR."
+                    ;;
+
+            esac
+            ;;
+
+        *)
+
+            info "Preserved runtime data was not restored."
+            ;;
+
+    esac
+}
+
+
+
 ############################################################
 # Create Global Command
 ############################################################
@@ -457,6 +554,9 @@ main() {
 
     echo
     install_linuxflow
+
+    echo
+    restore_preserved_data
 
     echo
     create_command
