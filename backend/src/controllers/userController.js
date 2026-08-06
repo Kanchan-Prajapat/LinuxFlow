@@ -173,7 +173,207 @@ async function getUserByUsername(req, res) {
 }
 
 
+async function createUser(req, res) {
+
+    try {
+
+        const {
+            username,
+            fullName = "",
+            shell = "/bin/bash",
+            createHome = true
+        } = req.body;
+
+
+        if (
+            typeof username !== "string" ||
+            !/^[a-z_][a-z0-9_-]{0,31}$/.test(username)
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid username"
+            });
+        }
+
+
+        if (
+            typeof fullName !== "string" ||
+            fullName.length > 100 ||
+            fullName.includes(":") ||
+            /[\r\n]/.test(fullName)
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid full name"
+            });
+        }
+
+
+        const allowedShells = [
+            "/bin/bash",
+            "/bin/sh",
+            "/sbin/nologin"
+        ];
+
+        if (!allowedShells.includes(shell)) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid or unsupported shell"
+            });
+        }
+
+
+        if (typeof createHome !== "boolean") {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "createHome must be true or false"
+            });
+        }
+
+
+        const result =
+            await userService.createUser({
+                username,
+                fullName,
+                shell,
+                createHome
+            });
+
+
+        if (!result.success) {
+
+            if (result.type === "exists") {
+
+                return res.status(409).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            return res.status(500).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+
+        return res.status(201).json({
+            success: true,
+            message:
+                `User '${username}' created successfully`,
+            data: result.user
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Create user error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to create user"
+        });
+    }
+}
+
+
+async function changeUserLockState(
+    req,
+    res
+) {
+
+    try {
+
+        const { username } = req.params;
+        const { action } = req;
+
+
+        if (
+            !/^[a-z_][a-z0-9_-]{0,31}$/.test(username)
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid username"
+            });
+        }
+
+
+        const result =
+            await userService
+                .changeUserLockState(
+                    username,
+                    action
+                );
+
+
+        if (!result.success) {
+
+            if (result.type === "not-found") {
+
+                return res.status(404).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            if (result.type === "protected") {
+
+                return res.status(403).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            return res.status(500).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+
+        return res.status(200).json({
+            success: true,
+            message:
+                `User '${username}' ${action}ed successfully`
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "User account action error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to modify user account"
+        });
+    }
+}
+
+
 module.exports = {
     getUsers,
-    getUserByUsername
+    getUserByUsername,
+     createUser,
+    changeUserLockState
+
 };
