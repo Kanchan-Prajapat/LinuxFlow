@@ -8,6 +8,8 @@ const processRoutes = require("./routes/processRoutes");
 const serviceRoutes =require("./routes/serviceRoutes");
 const userRoutes = require("./routes/userRoutes");
 const groupRoutes = require("./routes/groupRoutes");
+const permissionRoutes = require("./routes/permissionRoutes");
+const aclRoutes =require("./routes/aclRoutes");
 
 app.use(cors());
 app.use(express.json());
@@ -16,6 +18,9 @@ app.use("/api/processes", processRoutes);
 app.use( "/api/services", serviceRoutes);
 app.use("/api/users",userRoutes);
 app.use( "/api/groups", groupRoutes);
+app.use( "/api/permissions", permissionRoutes);
+app.use( "/api/acl", aclRoutes);
+
 
 const PORT = process.env.PORT || 5000;
 
