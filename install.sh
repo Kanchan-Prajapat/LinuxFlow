@@ -264,33 +264,122 @@ check_dependencies() {
 ############################################################
 # Install LinuxFlow
 ############################################################
+############################################################
+# Install / Update LinuxFlow
+############################################################
 
 install_linuxflow() {
 
-    info "Installing LinuxFlow to $INSTALL_DIR..."
+    info "Preparing LinuxFlow installation..."
 
-    if [ "$SCRIPT_DIR" = "$INSTALL_DIR" ]; then
-        warning "LinuxFlow is already running from the installation directory."
-    else
+    ########################################################
+    # Create installation directory
+    ########################################################
 
-        mkdir -p "$INSTALL_DIR"
-
-        if ! cp -a "$SCRIPT_DIR/." "$INSTALL_DIR/"; then
-            error "Failed to copy LinuxFlow files."
-            exit 1
-        fi
+    if ! mkdir -p "$INSTALL_DIR"; then
+        error "Unable to create installation directory."
+        exit 1
     fi
 
-    chmod +x "$INSTALL_DIR/LinuxFlow.sh"
+    ########################################################
+    # Detect existing installation
+    ########################################################
 
-    mkdir -p \
+    if [ -f "$INSTALL_DIR/LinuxFlow.sh" ]; then
+        warning "Existing LinuxFlow installation detected."
+        info "Application files will be updated."
+        info "Logs, backups and reports will be preserved."
+    else
+        info "Performing fresh LinuxFlow installation."
+    fi
+
+    ########################################################
+    # Install main application
+    ########################################################
+
+    if ! cp "$SCRIPT_DIR/LinuxFlow.sh" \
+            "$INSTALL_DIR/LinuxFlow.sh"; then
+
+        error "Failed to install LinuxFlow.sh."
+        exit 1
+    fi
+
+    ########################################################
+    # Install configuration
+    ########################################################
+
+    mkdir -p "$INSTALL_DIR/config"
+
+    if [ ! -f "$INSTALL_DIR/config/linuxflow.conf" ]; then
+
+        if ! cp "$SCRIPT_DIR/config/linuxflow.conf" \
+                "$INSTALL_DIR/config/linuxflow.conf"; then
+
+            error "Failed to install LinuxFlow configuration."
+            exit 1
+        fi
+
+        info "Default configuration installed."
+
+    else
+
+        info "Existing LinuxFlow configuration preserved."
+
+    fi
+
+    ########################################################
+    # Update modules
+    ########################################################
+
+    rm -rf "$INSTALL_DIR/modules"
+
+    if ! cp -a "$SCRIPT_DIR/modules" "$INSTALL_DIR/modules"; then
+        error "Failed to install LinuxFlow modules."
+        exit 1
+    fi
+
+    ########################################################
+    # Update utilities
+    ########################################################
+
+    rm -rf "$INSTALL_DIR/utils"
+
+    if ! cp -a "$SCRIPT_DIR/utils" "$INSTALL_DIR/utils"; then
+        error "Failed to install LinuxFlow utilities."
+        exit 1
+    fi
+
+    ########################################################
+    # Runtime directories
+    ########################################################
+
+    if ! mkdir -p \
         "$INSTALL_DIR/logs" \
         "$INSTALL_DIR/backups" \
-        "$INSTALL_DIR/reports"
+        "$INSTALL_DIR/reports"; then
 
-    success "LinuxFlow files installed successfully."
+        error "Failed to initialize runtime directories."
+        exit 1
+    fi
+
+    ########################################################
+    # Permissions
+    ########################################################
+
+    chmod 755 "$INSTALL_DIR/LinuxFlow.sh"
+
+    find "$INSTALL_DIR/modules" \
+         "$INSTALL_DIR/utils" \
+         -type f \
+         -name "*.sh" \
+         -exec chmod 644 {} \;
+
+    ########################################################
+    # Final result
+    ########################################################
+
+    success "LinuxFlow application files installed successfully."
 }
-
 
 ############################################################
 # Create Global Command

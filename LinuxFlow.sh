@@ -4,6 +4,24 @@
 # LinuxFlow Base Directory
 ############################################
 
+
+############################################
+# Root Privilege Check
+############################################
+
+if [ "$EUID" -ne 0 ]; then
+
+    echo
+    echo "[ERROR] LinuxFlow requires administrative privileges."
+    echo
+    echo "Run LinuxFlow using:"
+    echo
+    echo "    sudo linuxflow"
+    echo
+
+    exit 1
+fi
+
 SOURCE="${BASH_SOURCE[0]}"
 
 # Resolve symbolic links
