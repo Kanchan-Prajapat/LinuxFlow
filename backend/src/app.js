@@ -6,11 +6,18 @@ const app = express();
 const systemRoutes = require("./routes/systemRoutes");
 const processRoutes =
     require("./routes/processRoutes");
+const serviceRoutes =
+    require("./routes/serviceRoutes");
+
 
 app.use(cors());
 app.use(express.json());
 app.use("/api/system", systemRoutes);
 app.use("/api/processes", processRoutes);
+app.use(
+    "/api/services",
+    serviceRoutes
+);
 
 const PORT = process.env.PORT || 5000;
 
