@@ -13,7 +13,7 @@ set -u
 
 APP_NAME="LinuxFlow"
 INSTALL_DIR="/opt/linuxflow"
-COMMAND_PATH="/usr/local/bin/linuxflow"
+COMMAND_PATH="/usr/bin/linuxflow"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
