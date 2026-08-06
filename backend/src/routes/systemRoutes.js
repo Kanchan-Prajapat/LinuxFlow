@@ -10,4 +10,9 @@ router.get(
     systemController.getDashboardOverview
 );
 
+router.get(
+    "/disks",
+    systemController.getDiskUsage
+);
+
 module.exports = router;

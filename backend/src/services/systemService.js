@@ -1,4 +1,8 @@
 const os = require("os");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
+
+const execFileAsync = promisify(execFile);
 
 function getSystemInfo() {
     return {
@@ -98,6 +102,7 @@ async function getDashboardOverview() {
 
     const cpuUsage = await getCpuUsage();
     const totalMemory = os.totalmem();
+    
     const freeMemory = os.freemem();
     const usedMemory = totalMemory - freeMemory;
 
@@ -145,7 +150,70 @@ async function getDashboardOverview() {
 }
 
 
+async function getDiskUsage() {
+
+    const { stdout } = await execFileAsync(
+        "df",
+        [
+            "-B1",
+            "--output=source,size,used,avail,pcent,target",
+            "-x", "tmpfs",
+            "-x", "devtmpfs"
+        ]
+    );
+
+    const lines = stdout
+        .trim()
+        .split("\n")
+        .slice(1);
+
+    const filesystems = [];
+
+    for (const line of lines) {
+
+        const parts = line.trim().split(/\s+/);
+
+        if (parts.length < 6) {
+            continue;
+        }
+
+        const [
+            filesystem,
+            size,
+            used,
+            available,
+            usage,
+            ...mountParts
+        ] = parts;
+
+        const mountPoint = mountParts.join(" ");
+
+        const sizeBytes = Number(size);
+        const usedBytes = Number(used);
+        const availableBytes = Number(available);
+
+        filesystems.push({
+            filesystem,
+            mountPoint,
+
+            sizeBytes,
+            usedBytes,
+            availableBytes,
+
+            size: formatBytes(sizeBytes),
+            used: formatBytes(usedBytes),
+            available: formatBytes(availableBytes),
+
+            usagePercent:
+                Number(usage.replace("%", ""))
+        });
+    }
+
+    return filesystems;
+}
+
 module.exports = {
     getSystemInfo,
-    getDashboardOverview
+    getDashboardOverview,
+    getDiskUsage
 };
