@@ -16,5 +16,9 @@ router.get(
     processController.getProcessByPid
 );
 
+router.post(
+    "/:pid/terminate",
+    processController.terminateProcess
+);
 
 module.exports = router;
