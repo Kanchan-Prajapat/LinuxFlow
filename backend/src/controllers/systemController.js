@@ -43,7 +43,35 @@ async function getDashboardOverview(req, res) {
     }
 }
 
+
+async function getDiskUsage(req, res) {
+
+    try {
+
+        const disks =
+            await systemService.getDiskUsage();
+
+        return res.status(200).json({
+            success: true,
+            count: disks.length,
+            data: disks
+        });
+
+    } catch (error) {
+
+        console.error("Disk usage error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Unable to retrieve disk usage"
+        });
+    }
+}
+
+
+
 module.exports = {
     getSystemInfo,
-    getDashboardOverview
+    getDashboardOverview,
+    getDiskUsage
 };
