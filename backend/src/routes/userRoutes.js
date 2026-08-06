@@ -5,6 +5,31 @@ const userController =
 
 const router = express.Router();
 
+router.post(
+    "/",
+    userController.createUser
+);
+
+
+router.post(
+    "/:username/lock",
+    (req, res, next) => {
+        req.action = "lock";
+        next();
+    },
+    userController.changeUserLockState
+);
+
+
+router.post(
+    "/:username/unlock",
+    (req, res, next) => {
+        req.action = "unlock";
+        next();
+    },
+    userController.changeUserLockState
+);
+
 
 router.get(
     "/",
@@ -15,6 +40,7 @@ router.get(
     "/:username",
     userController.getUserByUsername
 );
+
 
 
 module.exports = router;

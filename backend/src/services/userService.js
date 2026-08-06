@@ -131,7 +131,177 @@ async function getUserByUsername(username) {
 }
 
 
+function isProtectedUser(username) {
+
+    const protectedUsers = new Set([
+        "root"
+    ]);
+
+    return protectedUsers.has(username);
+}
+
+
+async function createUser({
+    username,
+    fullName,
+    shell,
+    createHome
+}) {
+
+    const existingUser =
+        await getUserByUsername(username);
+
+    if (existingUser) {
+        return {
+            success: false,
+            type: "exists",
+            message: `User '${username}' already exists`
+        };
+    }
+
+
+    const args = [];
+
+    if (createHome) {
+        args.push("-m");
+    } else {
+        args.push("-M");
+    }
+
+    if (fullName) {
+        args.push("-c", fullName);
+    }
+
+    if (shell) {
+        args.push("-s", shell);
+    }
+
+    args.push(username);
+
+
+    try {
+
+        await execFileAsync(
+            "useradd",
+            args,
+            {
+                timeout: 10000
+            }
+        );
+
+        const createdUser =
+            await getUserByUsername(username);
+
+        return {
+            success: true,
+            user: createdUser
+        };
+
+    } catch (error) {
+
+        console.error(
+            "useradd error:",
+            error.stderr || error.message
+        );
+
+        return {
+            success: false,
+            type: "command-error",
+            message: `Unable to create user '${username}'`
+        };
+    }
+}
+
+
+async function changeUserLockState(
+    username,
+    action
+) {
+
+    const user =
+        await getUserByUsername(username);
+
+    if (!user) {
+
+        return {
+            success: false,
+            type: "not-found",
+            message: `User '${username}' not found`
+        };
+    }
+
+
+    if (isProtectedUser(username)) {
+
+        return {
+            success: false,
+            type: "protected",
+            message:
+                `User '${username}' is protected`
+        };
+    }
+
+
+    const flag =
+        action === "lock"
+            ? "-L"
+            : action === "unlock"
+                ? "-U"
+                : null;
+
+
+    if (!flag) {
+
+        return {
+            success: false,
+            type: "invalid-action",
+            message:
+                "Invalid user account action"
+        };
+    }
+
+
+    try {
+
+        await execFileAsync(
+            "usermod",
+            [
+                flag,
+                username
+            ],
+            {
+                timeout: 10000
+            }
+        );
+
+
+        return {
+            success: true,
+            action,
+            user
+        };
+
+    } catch (error) {
+
+        console.error(
+            "usermod error:",
+            error.stderr || error.message
+        );
+
+        return {
+            success: false,
+            type: "command-error",
+            message:
+                `Unable to ${action} user '${username}'`
+        };
+    }
+}
+
+
+
 module.exports = {
     getUsers,
-    getUserByUsername
+    getUserByUsername,
+       createUser,
+    changeUserLockState
 };
