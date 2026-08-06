@@ -51,9 +51,28 @@ async function getDiskUsage(req, res) {
         const disks =
             await systemService.getDiskUsage();
 
+        const summary = {
+            normal: 0,
+            warning: 0,
+            critical: 0
+        };
+
+        disks.forEach(disk => {
+
+            if (disk.status === "critical") {
+                summary.critical++;
+            } else if (disk.status === "warning") {
+                summary.warning++;
+            } else {
+                summary.normal++;
+            }
+
+        });
+
         return res.status(200).json({
             success: true,
             count: disks.length,
+            summary,
             data: disks
         });
 
@@ -69,9 +88,33 @@ async function getDiskUsage(req, res) {
 }
 
 
+async function getSystemHealth(req, res) {
+
+    try {
+
+        const health =
+            await systemService.getSystemHealth();
+
+        return res.status(200).json({
+            success: true,
+            data: health
+        });
+
+    } catch (error) {
+
+        console.error("System health error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Unable to determine system health"
+        });
+    }
+}
+
 
 module.exports = {
     getSystemInfo,
     getDashboardOverview,
-    getDiskUsage
+    getDiskUsage,
+    getSystemHealth
 };

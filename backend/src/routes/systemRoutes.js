@@ -15,4 +15,9 @@ router.get(
     systemController.getDiskUsage
 );
 
+router.get(
+    "/health",
+    systemController.getSystemHealth
+);
+
 module.exports = router;
