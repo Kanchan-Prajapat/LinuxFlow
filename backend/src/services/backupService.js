@@ -6,6 +6,9 @@ const { promisify } = require("util");
 const execFileAsync = promisify(execFile);
 
 const BACKUP_DIR = "/var/backups/linuxflow";
+const RESTORE_DIR =
+    "/var/lib/linuxflow/restores";
+
 
 
 async function ensureBackupDirectory() {
