@@ -186,9 +186,196 @@ async function getServices(req, res) {
 }
 
 
+function validatePort(port) {
+
+    const number = Number(port);
+
+    return (
+        Number.isInteger(number) &&
+        number >= 1 &&
+        number <= 65535
+    );
+}
+
+
+function validateProtocol(protocol) {
+
+    return (
+        protocol === "tcp" ||
+        protocol === "udp"
+    );
+}
+
+
+async function addPort(req, res) {
+
+    try {
+
+        const {
+            zone,
+            port,
+            protocol
+        } = req.body;
+
+
+        if (
+            !validateZone(zone) ||
+            !validatePort(port) ||
+            !validateProtocol(protocol)
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Valid zone, port (1-65535) and protocol (tcp/udp) are required"
+            });
+        }
+
+
+        const result =
+            await firewallService.addPort(
+                zone,
+                port,
+                protocol
+            );
+
+
+        if (!result.success) {
+
+            if (
+                result.type === "invalid" ||
+                result.type === "exists"
+            ) {
+
+                return res.status(400).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+        }
+
+
+        return res.status(201).json({
+            success: true,
+            message:
+                `Firewall port '${port}/${protocol}' enabled successfully`,
+            data: result.data
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Add firewall port error:",
+            error
+        );
+
+
+        const stderr =
+            String(error.stderr || "");
+
+
+        if (stderr.includes("INVALID_ZONE")) {
+
+            return res.status(404).json({
+                success: false,
+                message:
+                    "Firewall zone not found"
+            });
+        }
+
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to enable firewall port"
+        });
+    }
+}
+
+
+async function removePort(req, res) {
+
+    try {
+
+        const {
+            zone,
+            port,
+            protocol
+        } = req.body;
+
+
+        if (
+            !validateZone(zone) ||
+            !validatePort(port) ||
+            !validateProtocol(protocol)
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Valid zone, port and protocol are required"
+            });
+        }
+
+
+        const result =
+            await firewallService.removePort(
+                zone,
+                port,
+                protocol
+            );
+
+
+        if (!result.success) {
+
+            if (result.type === "not-found") {
+
+                return res.status(404).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            return res.status(400).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+
+        return res.status(200).json({
+            success: true,
+            message:
+                `Firewall port '${port}/${protocol}' removed successfully`,
+            data: result.data
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Remove firewall port error:",
+            error
+        );
+
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to remove firewall port"
+        });
+    }
+}
+
+
+
 module.exports = {
     getStatus,
     getZones,
     getZoneDetails,
-    getServices
+    getServices,
+      addPort,
+    removePort
 };

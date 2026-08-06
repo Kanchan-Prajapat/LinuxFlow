@@ -30,4 +30,15 @@ router.get(
 );
 
 
+router.post(
+    "/ports",
+    firewallController.addPort
+);
+
+
+router.delete(
+    "/ports",
+    firewallController.removePort
+);
+
 module.exports = router;
