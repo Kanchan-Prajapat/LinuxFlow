@@ -1,4 +1,4 @@
-#!/bin/bash
+!/bin/bash
 
 ############################################################
 # LinuxFlow Installer
@@ -16,6 +16,8 @@ INSTALL_DIR="/opt/linuxflow"
 COMMAND_PATH="/usr/bin/linuxflow"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+
 
 
 ############################################################
