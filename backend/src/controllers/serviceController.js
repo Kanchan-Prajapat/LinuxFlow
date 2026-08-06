@@ -172,7 +172,94 @@ async function getServiceByName(req, res) {
 }
 
 
+async function manageService(req, res) {
+
+    try {
+
+        const { name } = req.params;
+        const { action } = req;
+
+
+        if (
+            !/^[a-zA-Z0-9@_.:-]+$/.test(name)
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid service name"
+            });
+        }
+
+
+        const result =
+            await serviceService.manageService(
+                name,
+                action
+            );
+
+
+        if (!result.success) {
+
+            if (result.type === "not-found") {
+
+                return res.status(404).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            if (result.type === "protected") {
+
+                return res.status(403).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            if (result.type === "invalid-action") {
+
+                return res.status(400).json({
+                    success: false,
+                    message: result.message
+                });
+            }
+
+
+            return res.status(500).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+
+        return res.status(200).json({
+            success: true,
+            message:
+                `Service '${name}' ${action} operation completed`,
+            data: result.service
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Service management error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to manage service"
+        });
+    }
+}
+
+
 module.exports = {
     getServices,
-    getServiceByName
+    getServiceByName,
+    manageService
 };

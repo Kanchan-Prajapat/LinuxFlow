@@ -135,8 +135,127 @@ async function getServiceByName(name) {
     }
 }
 
+function normalizeServiceName(name) {
+
+    return name.endsWith(".service")
+        ? name
+        : `${name}.service`;
+}
+
+
+const protectedStopServices = new Set([
+    "systemd.service",
+    "dbus.service",
+    "NetworkManager.service",
+    "sshd.service",
+    "systemd-logind.service",
+    "systemd-journald.service"
+]);
+
+
+function isProtectedFromStop(serviceName) {
+
+    return protectedStopServices.has(
+        serviceName
+    );
+}
+
+async function manageService(name, action) {
+
+    const validActions = [
+        "start",
+        "stop",
+        "restart"
+    ];
+
+    if (!validActions.includes(action)) {
+
+        return {
+            success: false,
+            type: "invalid-action",
+            message: "Invalid service action"
+        };
+    }
+
+
+    const serviceName =
+        normalizeServiceName(name);
+
+
+    const service =
+        await getServiceByName(serviceName);
+
+
+    if (!service) {
+
+        return {
+            success: false,
+            type: "not-found",
+            message:
+                `Service '${serviceName}' not found`
+        };
+    }
+
+
+    // Stop/restart can interrupt critical connectivity
+    if (
+        (action === "stop" ||
+         action === "restart") &&
+        isProtectedFromStop(serviceName)
+    ) {
+
+        return {
+            success: false,
+            type: "protected",
+            message:
+                `Service '${serviceName}' is protected from ${action}`
+        };
+    }
+
+
+    try {
+
+        await execFileAsync(
+            "systemctl",
+            [
+                action,
+                serviceName
+            ],
+            {
+                timeout: 15000
+            }
+        );
+
+
+        const updatedService =
+            await getServiceByName(
+                serviceName
+            );
+
+
+        return {
+            success: true,
+            action,
+            service: updatedService
+        };
+
+
+    } catch (error) {
+
+        return {
+            success: false,
+            type: "systemctl-error",
+            message:
+                `Unable to ${action} service '${serviceName}'`
+        };
+    }
+}
+
+
+
 
 module.exports = {
     getServices,
-    getServiceByName
+    getServiceByName,
+    manageService
 };

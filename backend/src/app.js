@@ -8,6 +8,8 @@ const processRoutes =
     require("./routes/processRoutes");
 const serviceRoutes =
     require("./routes/serviceRoutes");
+const userRoutes =
+    require("./routes/userRoutes");
 
 
 app.use(cors());
@@ -17,6 +19,10 @@ app.use("/api/processes", processRoutes);
 app.use(
     "/api/services",
     serviceRoutes
+);
+app.use(
+    "/api/users",
+    userRoutes
 );
 
 const PORT = process.env.PORT || 5000;
