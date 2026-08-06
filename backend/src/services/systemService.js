@@ -156,7 +156,8 @@ async function getDiskUsage() {
         "df",
         [
             "-B1",
-            "--output=source,size,used,avail,pcent,target",
+            "-T",
+            "--output=source,fstype,size,used,avail,pcent,target",
             "-x", "tmpfs",
             "-x", "devtmpfs"
         ]
@@ -169,16 +170,27 @@ async function getDiskUsage() {
 
     const filesystems = [];
 
+    const ignoredTypes = new Set([
+        "iso9660",
+        "squashfs",
+        "overlay",
+        "proc",
+        "sysfs",
+        "cgroup",
+        "cgroup2"
+    ]);
+
     for (const line of lines) {
 
         const parts = line.trim().split(/\s+/);
 
-        if (parts.length < 6) {
+        if (parts.length < 7) {
             continue;
         }
 
         const [
             filesystem,
+            filesystemType,
             size,
             used,
             available,
@@ -188,12 +200,29 @@ async function getDiskUsage() {
 
         const mountPoint = mountParts.join(" ");
 
+        // Ignore removable/pseudo filesystems
+        if (ignoredTypes.has(filesystemType)) {
+            continue;
+        }
+
         const sizeBytes = Number(size);
         const usedBytes = Number(used);
         const availableBytes = Number(available);
 
+        const usagePercent =
+            Number(usage.replace("%", ""));
+
+        let status = "normal";
+
+        if (usagePercent >= 90) {
+            status = "critical";
+        } else if (usagePercent >= 70) {
+            status = "warning";
+        }
+
         filesystems.push({
             filesystem,
+            filesystemType,
             mountPoint,
 
             sizeBytes,
@@ -204,16 +233,154 @@ async function getDiskUsage() {
             used: formatBytes(usedBytes),
             available: formatBytes(availableBytes),
 
-            usagePercent:
-                Number(usage.replace("%", ""))
+            usagePercent,
+            status
         });
     }
 
     return filesystems;
 }
 
+
+async function getSystemHealth() {
+
+    const overview = await getDashboardOverview();
+    const disks = await getDiskUsage();
+
+    const cpuUsage = overview.cpu.usagePercent;
+    const memoryUsage = overview.memory.usagePercent;
+
+    const loadAverage = overview.cpu.loadAverage[0];
+    const cpuCores = overview.cpu.cores;
+
+    // Normalize 1-minute load against CPU core count
+    const loadPercent =
+        cpuCores > 0
+            ? (loadAverage / cpuCores) * 100
+            : 0;
+
+
+    ########################################################
+    // CPU Health
+    ########################################################
+
+    let cpuStatus = "healthy";
+
+    if (cpuUsage >= 90) {
+        cpuStatus = "critical";
+    } else if (cpuUsage >= 70) {
+        cpuStatus = "warning";
+    }
+
+
+    ########################################################
+    // Memory Health
+    ########################################################
+
+    let memoryStatus = "healthy";
+
+    if (memoryUsage >= 90) {
+        memoryStatus = "critical";
+    } else if (memoryUsage >= 75) {
+        memoryStatus = "warning";
+    }
+
+
+    ########################################################
+    // Load Health
+    ########################################################
+
+    let loadStatus = "healthy";
+
+    if (loadPercent >= 100) {
+        loadStatus = "critical";
+    } else if (loadPercent >= 70) {
+        loadStatus = "warning";
+    }
+
+
+    ########################################################
+    // Disk Health
+    ########################################################
+
+    let diskStatus = "healthy";
+
+    const criticalDisks =
+        disks.filter(disk =>
+            disk.status === "critical"
+        );
+
+    const warningDisks =
+        disks.filter(disk =>
+            disk.status === "warning"
+        );
+
+    if (criticalDisks.length > 0) {
+        diskStatus = "critical";
+    } else if (warningDisks.length > 0) {
+        diskStatus = "warning";
+    }
+
+
+    ########################################################
+    // Overall Health
+    ########################################################
+
+    const statuses = [
+        cpuStatus,
+        memoryStatus,
+        loadStatus,
+        diskStatus
+    ];
+
+    let overallStatus = "healthy";
+
+    if (statuses.includes("critical")) {
+        overallStatus = "critical";
+    } else if (statuses.includes("warning")) {
+        overallStatus = "warning";
+    }
+
+
+    return {
+
+        status: overallStatus,
+
+        components: {
+
+            cpu: {
+                usagePercent: cpuUsage,
+                status: cpuStatus
+            },
+
+            memory: {
+                usagePercent: memoryUsage,
+                status: memoryStatus
+            },
+
+            load: {
+                oneMinute: loadAverage,
+                normalizedPercent:
+                    Number(loadPercent.toFixed(2)),
+                status: loadStatus
+            },
+
+            disk: {
+                total: disks.length,
+                warning: warningDisks.length,
+                critical: criticalDisks.length,
+                status: diskStatus
+            }
+
+        },
+
+        checkedAt: new Date().toISOString()
+    };
+}
+
 module.exports = {
     getSystemInfo,
     getDashboardOverview,
-    getDiskUsage
+    getDiskUsage,
+    getSystemHealth
 };
