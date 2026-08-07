@@ -66,4 +66,23 @@ router.delete(
     lvmController.removePhysicalVolume
 );
 
+
+router.post(
+    "/filesystems",
+    lvmController.createFilesystem
+);
+
+
+router.post(
+    "/mounts",
+    lvmController.mountLogicalVolume
+);
+
+
+router.delete(
+    "/mounts",
+    lvmController.unmountLogicalVolume
+);
+
+
 module.exports = router;
