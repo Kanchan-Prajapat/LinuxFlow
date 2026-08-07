@@ -502,6 +502,18 @@ async function removeService(req, res) {
                 );
 
 
+                if (
+    result.type ===
+    "protected-service"
+) {
+
+    return res.status(403).json({
+        success: false,
+        message: result.message
+    });
+}
+
+
         if (!result.success) {
 
             if (
@@ -554,6 +566,128 @@ async function removeService(req, res) {
 }
 
 
+
+async function getSyncStatus(req, res) {
+
+    try {
+
+        const {
+            zone
+        } = req.params;
+
+
+        if (!validateZone(zone)) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid firewall zone"
+            });
+        }
+
+
+        const data =
+            await firewallService
+                .getSyncStatus(zone);
+
+
+        return res.status(200).json({
+            success: true,
+            data
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Firewall sync status error:",
+            error
+        );
+
+
+        const stderr =
+            String(error.stderr || "");
+
+
+        if (
+            stderr.includes(
+                "INVALID_ZONE"
+            )
+        ) {
+
+            return res.status(404).json({
+                success: false,
+                message:
+                    "Firewall zone not found"
+            });
+        }
+
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to determine firewall sync status"
+        });
+    }
+}
+
+
+
+async function reloadFirewall(req, res) {
+
+    try {
+
+        const {
+            confirmation
+        } = req.body || {};
+
+
+        if (
+            confirmation !==
+            "RELOAD FIREWALL"
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid firewall reload confirmation",
+                requiredConfirmation:
+                    "RELOAD FIREWALL"
+            });
+        }
+
+
+        const data =
+            await firewallService
+                .reloadFirewall();
+
+
+        return res.status(200).json({
+            success: true,
+            message:
+                "Firewall reloaded successfully",
+            data
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Firewall reload error:",
+            error
+        );
+
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to reload firewall"
+        });
+    }
+}
+
+
+
 module.exports = {
     getStatus,
     getZones,
@@ -562,5 +696,7 @@ module.exports = {
       addPort,
     removePort,
     addService,
-    removeService
+    removeService,
+      getSyncStatus,
+    reloadFirewall
 };

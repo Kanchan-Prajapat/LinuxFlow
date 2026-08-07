@@ -18,10 +18,6 @@ router.get(
 );
 
 
-router.get(
-    "/zones/:zone",
-    firewallController.getZoneDetails
-);
 
 
 router.get(
@@ -52,5 +48,25 @@ router.delete(
     "/services",
     firewallController.removeService
 );
+
+router.get(
+    "/zones/:zone/sync",
+    firewallController.getSyncStatus
+);
+
+
+router.get(
+    "/zones/:zone",
+    firewallController.getZoneDetails
+);
+
+
+
+router.post(
+    "/reload",
+    firewallController.reloadFirewall
+);
+
+
 
 module.exports = router;

@@ -742,6 +742,16 @@ async function removeService(
         };
     }
 
+    if (service === "ssh") {
+
+    return {
+        success: false,
+        type: "protected-service",
+        message:
+            "SSH firewall service is protected and cannot be removed through LinuxFlow"
+    };
+}
+
 
     const permanentEnabled =
         await isServiceEnabled(
@@ -807,6 +817,165 @@ async function removeService(
 }
 
 
+async function reloadFirewall() {
+
+    await runFirewallCommand([
+        "--reload"
+    ]);
+
+    const status =
+        await getFirewallStatus();
+
+    return {
+        reloaded: true,
+        ...status
+    };
+}
+
+async function getZoneConfig(
+    zone,
+    permanent = false
+) {
+
+    const args = [];
+
+    if (permanent) {
+        args.push("--permanent");
+    }
+
+    args.push(
+        "--zone",
+        zone,
+        "--list-all"
+    );
+
+    return runFirewallCommand(args);
+}
+
+
+function extractConfigValue(
+    output,
+    key
+) {
+
+    const line =
+        output
+            .split("\n")
+            .map(item => item.trim())
+            .find(item =>
+                item.startsWith(`${key}:`)
+            );
+
+
+    if (!line) {
+        return [];
+    }
+
+
+    const value =
+        line
+            .slice(key.length + 1)
+            .trim();
+
+
+    return value
+        ? value.split(/\s+/)
+        : [];
+}
+
+
+async function getSyncStatus(zone) {
+
+    const runtime =
+        await getZoneConfig(
+            zone,
+            false
+        );
+
+
+    const permanent =
+        await getZoneConfig(
+            zone,
+            true
+        );
+
+
+    const runtimePorts =
+        extractConfigValue(
+            runtime,
+            "ports"
+        );
+
+
+    const permanentPorts =
+        extractConfigValue(
+            permanent,
+            "ports"
+        );
+
+
+    const runtimeServices =
+        extractConfigValue(
+            runtime,
+            "services"
+        );
+
+
+    const permanentServices =
+        extractConfigValue(
+            permanent,
+            "services"
+        );
+
+
+    const normalize =
+        values =>
+            [...values].sort();
+
+
+    const portsInSync =
+        JSON.stringify(
+            normalize(runtimePorts)
+        ) ===
+        JSON.stringify(
+            normalize(permanentPorts)
+        );
+
+
+    const servicesInSync =
+        JSON.stringify(
+            normalize(runtimeServices)
+        ) ===
+        JSON.stringify(
+            normalize(permanentServices)
+        );
+
+
+    return {
+
+        zone,
+
+        inSync:
+            portsInSync &&
+            servicesInSync,
+
+        ports: {
+            inSync: portsInSync,
+            runtime: runtimePorts,
+            permanent: permanentPorts
+        },
+
+        services: {
+            inSync: servicesInSync,
+            runtime: runtimeServices,
+            permanent: permanentServices
+        }
+    };
+}
+
+
+
+
 module.exports = {
     getFirewallStatus,
     getZones,
@@ -815,5 +984,7 @@ module.exports = {
     addPort,
     removePort,
        addService,
-    removeService
+    removeService,
+        reloadFirewall,
+    getSyncStatus
 };
