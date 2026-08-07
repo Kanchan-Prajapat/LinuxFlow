@@ -30,4 +30,15 @@ router.get(
 );
 
 
+router.post(
+    "/devices/inspect",
+    lvmController.inspectDevice
+);
+
+
+router.post(
+    "/pvs",
+    lvmController.createPhysicalVolume
+);
+
 module.exports = router;
