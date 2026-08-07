@@ -676,50 +676,6 @@ async function createLogicalVolume(
 }
 
 
-// Reject mounted LV
-try {
-
-    const mounted =
-        await runLvmCommand(
-            "findmnt",
-            [
-                "-n",
-                "-S",
-                lv.path
-            ]
-        );
-
-
-    if (mounted) {
-
-        return {
-            success: false,
-            type: "mounted",
-            message:
-                "Logical volume is mounted. Unmount it before deletion."
-        };
-    }
-
-} catch (_) {}
-
-
-const fstabEntry =
-    await findFstabEntry(
-        lv.path
-    );
-
-
-if (fstabEntry) {
-
-    return {
-        success: false,
-        type: "fstab-entry",
-        message:
-            "Logical volume still has an /etc/fstab entry. Remove its mount first."
-    };
-}
-
-
 async function removeLogicalVolume(
     volumeGroup,
     name
@@ -728,6 +684,7 @@ async function removeLogicalVolume(
     const lvs =
         await getLogicalVolumes();
 
+
     const lv =
         lvs.find(
             item =>
@@ -735,7 +692,9 @@ async function removeLogicalVolume(
                 item.name === name
         );
 
+
     if (!lv) {
+
         return {
             success: false,
             type: "not-found",
@@ -744,6 +703,66 @@ async function removeLogicalVolume(
         };
     }
 
+
+    // ########################################################
+    // Reject mounted LV
+    // ########################################################
+
+    try {
+
+        const mounted =
+            await runLvmCommand(
+                "findmnt",
+                [
+                    "-n",
+                    "-S",
+                    lv.path
+                ]
+            );
+
+
+        if (mounted.trim()) {
+
+            return {
+                success: false,
+                type: "mounted",
+                message:
+                    "Logical volume is mounted. Unmount it before deletion."
+            };
+        }
+
+    } catch (_) {
+
+        // findmnt returns non-zero when
+        // device is not mounted.
+    }
+
+
+    // ########################################################
+    // Reject LV still present in /etc/fstab
+    // ########################################################
+
+    const fstabEntry =
+        await findFstabEntry(
+            lv.path
+        );
+
+
+    if (fstabEntry) {
+
+        return {
+            success: false,
+            type: "fstab-entry",
+            message:
+                "Logical volume still has an /etc/fstab entry. Remove its mount first."
+        };
+    }
+
+
+    // ########################################################
+    // Remove LV
+    // ########################################################
+
     await runLvmCommand(
         "lvremove",
         [
@@ -751,6 +770,7 @@ async function removeLogicalVolume(
             `${volumeGroup}/${name}`
         ]
     );
+
 
     return {
         success: true
