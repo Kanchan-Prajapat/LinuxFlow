@@ -16,6 +16,7 @@ const lvmRoutes = require("./routes/lvmRoutes");
 const swapRoutes = require("./routes/swapRoutes");
 const sshRoutes = require("./routes/sshRoutes");
 const cronRoutes = require("./routes/cronRoutes");
+const monitoringRoutes =require("./routes/monitoringRoutes");
 
 
 app.use(cors());
@@ -33,6 +34,8 @@ app.use( "/api/lvm", lvmRoutes);
 app.use( "/api/swap", swapRoutes);
 app.use( "/api/ssh", sshRoutes);
 app.use( "/api/cron", cronRoutes);
+app.use(  "/api/monitoring", monitoringRoutes);
+
 
 const PORT = process.env.PORT || 5000;
 
