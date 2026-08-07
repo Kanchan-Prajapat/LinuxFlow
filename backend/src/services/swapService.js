@@ -35,43 +35,59 @@ function isManagedSwapPath(path) {
     );
 }
 
-
 async function getSwapInfo() {
 
-    const stdout =
-        await runCommand(
-            "swapon",
-            [
-                "--show",
-                "--bytes",
-                "--noheadings",
-                "--output=NAME,TYPE,SIZE,USED,PRIO"
-            ]
+    const content =
+        await fs.promises.readFile(
+            "/proc/swaps",
+            "utf8"
         );
 
 
-    if (!stdout) {
+    const lines =
+        content
+            .trim()
+            .split("\n")
+            .slice(1);
+
+
+    if (lines.length === 0) {
         return [];
     }
 
 
-    return stdout
-        .split("\n")
-        .filter(Boolean)
+    return lines
+        .filter(line => line.trim())
         .map(line => {
 
             const parts =
                 line.trim().split(/\s+/);
 
+
+            const [
+                name,
+                type,
+                sizeKB,
+                usedKB,
+                priority
+            ] = parts;
+
+
             return {
-                name: parts[0],
-                type: parts[1],
-                sizeBytes: Number(parts[2]),
-                usedBytes: Number(parts[3]),
-                priority: Number(parts[4]),
+                name,
+                type,
+
+                sizeBytes:
+                    Number(sizeKB) * 1024,
+
+                usedBytes:
+                    Number(usedKB) * 1024,
+
+                priority:
+                    Number(priority),
 
                 managedByLinuxFlow:
-                    isManagedSwapPath(parts[0])
+                    isManagedSwapPath(name)
             };
         });
 }
