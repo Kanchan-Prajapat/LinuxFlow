@@ -99,6 +99,14 @@ async function addFstabEntry({
     }
 
 
+  // Mount target must normally be unique.
+//
+// Swap entries use "none" as their target,
+// therefore multiple swap entries may legally
+// share the same target.
+
+if (target !== "none") {
+
     const existingTarget =
         await findFstabEntry(target);
 
@@ -111,7 +119,7 @@ async function addFstabEntry({
                 `FSTAB entry already exists for mount point '${target}'`
         };
     }
-
+}
 
     const entry =
         `${source}\t${target}\t${filesystem}\t${options}\t${dump}\t${pass}`;
