@@ -436,7 +436,57 @@ async function inspectDevice(device) {
 
 
 
+async function createPhysicalVolume(
+    device
+) {
 
+    const inspection =
+        await inspectDevice(device);
+
+
+    if (!inspection.safe) {
+
+        return {
+            success: false,
+            type: "unsafe-device",
+            message: inspection.reason
+        };
+    }
+
+
+    await runLvmCommand(
+        "pvcreate",
+        [
+            "--yes",
+            device
+        ]
+    );
+
+
+    // Verify creation
+    const pvs =
+        await getPhysicalVolumes();
+
+
+    const created =
+        pvs.find(
+            pv => pv.name === device
+        );
+
+
+    if (!created) {
+
+        throw new Error(
+            "PV_CREATION_VALIDATION_FAILED"
+        );
+    }
+
+
+    return {
+        success: true,
+        data: created
+    };
+}
 
 module.exports = {
     getPhysicalVolumes,
