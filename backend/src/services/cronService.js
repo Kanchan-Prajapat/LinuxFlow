@@ -611,13 +611,13 @@ function parseLinuxFlowJobs(content) {
             values.enabled === "true";
 
 
-        const normalizedLine =
-            cronLine
-                .replace(
-                    /^\s*#\s*/,
-                    ""
-                )
-                .trim();
+       const normalizedLine =
+    cronLine
+        .replace(
+            /^\s*#\s*LINUXFLOW-DISABLED\s+/,
+            ""
+        )
+        .trim();
 
 
         jobs.push({
@@ -773,6 +773,280 @@ async function getLinuxFlowCronJobs() {
     );
 }
 
+
+// ########################################################
+// Update LinuxFlow Managed Cron Job
+// ########################################################
+
+async function setCronJobEnabled(
+    id,
+    enabled
+) {
+
+    const content =
+        await readLinuxFlowCronFile();
+
+    const lines =
+        content.split("\n");
+
+    let found = false;
+
+
+    for (let i = 0; i < lines.length; i++) {
+
+        const metadataLine =
+            lines[i].trim();
+
+        if (
+            !metadataLine.startsWith(
+                `# ${LINUXFLOW_TAG}:`
+            )
+        ) {
+            continue;
+        }
+
+
+        const metadata =
+            metadataLine.slice(
+                `# ${LINUXFLOW_TAG}:`.length
+            );
+
+        const values = {};
+
+        for (const pair of metadata.split(";")) {
+
+            const separator =
+                pair.indexOf("=");
+
+            if (separator === -1) {
+                continue;
+            }
+
+            const key =
+                pair
+                    .slice(0, separator)
+                    .trim();
+
+            const value =
+                pair
+                    .slice(separator + 1)
+                    .trim();
+
+            values[key] = value;
+        }
+
+
+        if (values.id !== id) {
+            continue;
+        }
+
+
+        found = true;
+
+
+        // Update metadata
+        values.enabled =
+            enabled ? "true" : "false";
+
+
+        lines[i] =
+            `# ${LINUXFLOW_TAG}:id=${values.id};name=${values.name};enabled=${values.enabled}`;
+
+
+        // Next line is the actual cron job.
+        if (i + 1 >= lines.length) {
+
+            return {
+                success: false,
+                type: "invalid-job",
+                message:
+                    `Cron job '${id}' has no cron command`
+            };
+        }
+
+
+        if (enabled) {
+
+            // Remove ONLY LinuxFlow's disable marker.
+            lines[i + 1] =
+                lines[i + 1]
+                    .replace(
+                        /^\s*#\s*LINUXFLOW-DISABLED\s+/,
+                        ""
+                    );
+
+        } else {
+
+            if (
+                !lines[i + 1]
+                    .trim()
+                    .startsWith(
+                        "# LINUXFLOW-DISABLED "
+                    )
+            ) {
+
+                lines[i + 1] =
+                    `# LINUXFLOW-DISABLED ${lines[i + 1]}`;
+            }
+        }
+
+
+        break;
+    }
+
+
+    if (!found) {
+
+        return {
+            success: false,
+            type: "not-found",
+            message:
+                `LinuxFlow cron job '${id}' not found`
+        };
+    }
+
+
+    await fs.promises.writeFile(
+        LINUXFLOW_CRON_FILE,
+        lines.join("\n"),
+        {
+            encoding: "utf8",
+            mode: 0o600
+        }
+    );
+
+
+    return {
+        success: true,
+
+        data: {
+            id,
+            enabled
+        }
+    };
+}
+
+// ########################################################
+// Delete LinuxFlow Managed Cron Job
+// ########################################################
+
+async function deleteCronJob(id) {
+
+    const content =
+        await readLinuxFlowCronFile();
+
+    const lines =
+        content.split("\n");
+
+    let metadataIndex = -1;
+    let jobName = null;
+
+
+    for (let i = 0; i < lines.length; i++) {
+
+        const line =
+            lines[i].trim();
+
+        if (
+            !line.startsWith(
+                `# ${LINUXFLOW_TAG}:`
+            )
+        ) {
+            continue;
+        }
+
+
+        const metadata =
+            line.slice(
+                `# ${LINUXFLOW_TAG}:`.length
+            );
+
+
+        const values = {};
+
+        for (const pair of metadata.split(";")) {
+
+            const separator =
+                pair.indexOf("=");
+
+            if (separator === -1) {
+                continue;
+            }
+
+            const key =
+                pair.slice(
+                    0,
+                    separator
+                ).trim();
+
+            const value =
+                pair.slice(
+                    separator + 1
+                ).trim();
+
+            values[key] = value;
+        }
+
+
+        if (values.id === id) {
+
+            metadataIndex = i;
+            jobName = values.name;
+
+            break;
+        }
+    }
+
+
+    if (metadataIndex === -1) {
+
+        return {
+            success: false,
+            type: "not-found",
+            message:
+                `LinuxFlow cron job '${id}' not found`
+        };
+    }
+
+
+    /*
+     * Remove:
+     *
+     * metadata line
+     * +
+     * associated cron command line
+     */
+
+    lines.splice(
+        metadataIndex,
+        2
+    );
+
+
+    await fs.promises.writeFile(
+        LINUXFLOW_CRON_FILE,
+        lines.join("\n"),
+        {
+            encoding: "utf8",
+            mode: 0o600
+        }
+    );
+
+
+    return {
+        success: true,
+
+        data: {
+            id,
+            name: jobName
+        }
+    };
+}
+
+
+
+
+
 module.exports = {
     parseCrontab,
     getCurrentUserCronJobs,
@@ -783,5 +1057,7 @@ module.exports = {
     validateCronSchedule,
     validateCronCommand,
     getLinuxFlowCronJobs,
-    createCronJob
+    createCronJob,
+       setCronJobEnabled,
+    deleteCronJob
 };
