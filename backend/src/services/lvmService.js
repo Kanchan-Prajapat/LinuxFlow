@@ -2,7 +2,13 @@ const { execFile } = require("child_process");
 const { promisify } = require("util");
 
 const execFileAsync = promisify(execFile);
+const fs = require("fs");
 
+const {
+    addFstabEntry,
+    removeFstabEntry,
+    findFstabEntry
+} = require("../utils/fstab");
 
 async function runLvmCommand(
     command,
@@ -670,6 +676,49 @@ async function createLogicalVolume(
 }
 
 
+// Reject mounted LV
+try {
+
+    const mounted =
+        await runLvmCommand(
+            "findmnt",
+            [
+                "-n",
+                "-S",
+                lv.path
+            ]
+        );
+
+
+    if (mounted) {
+
+        return {
+            success: false,
+            type: "mounted",
+            message:
+                "Logical volume is mounted. Unmount it before deletion."
+        };
+    }
+
+} catch (_) {}
+
+
+const fstabEntry =
+    await findFstabEntry(
+        lv.path
+    );
+
+
+if (fstabEntry) {
+
+    return {
+        success: false,
+        type: "fstab-entry",
+        message:
+            "Logical volume still has an /etc/fstab entry. Remove its mount first."
+    };
+}
+
 
 async function removeLogicalVolume(
     volumeGroup,
@@ -791,6 +840,436 @@ async function removePhysicalVolume(device) {
 
 
 
+async function createFilesystem(
+    volumeGroup,
+    logicalVolume,
+    filesystem
+) {
+
+    const allowedFilesystems =
+        new Set([
+            "xfs",
+            "ext4"
+        ]);
+
+
+    if (
+        !allowedFilesystems.has(
+            filesystem
+        )
+    ) {
+
+        return {
+            success: false,
+            type: "invalid-filesystem",
+            message:
+                "Only xfs and ext4 filesystems are supported"
+        };
+    }
+
+
+    const lvs =
+        await getLogicalVolumes();
+
+
+    const lv =
+        lvs.find(item =>
+            item.volumeGroup === volumeGroup &&
+            item.name === logicalVolume
+        );
+
+
+    if (!lv) {
+
+        return {
+            success: false,
+            type: "not-found",
+            message:
+                "Logical volume not found"
+        };
+    }
+
+
+    // Check existing filesystem
+    let existingFilesystem = "";
+
+    try {
+
+        existingFilesystem =
+            await runLvmCommand(
+                "blkid",
+                [
+                    "-s",
+                    "TYPE",
+                    "-o",
+                    "value",
+                    lv.path
+                ]
+            );
+
+    } catch (_) {
+
+        existingFilesystem = "";
+    }
+
+
+    if (existingFilesystem.trim()) {
+
+        return {
+            success: false,
+            type: "filesystem-exists",
+            message:
+                `Logical volume already contains '${existingFilesystem.trim()}' filesystem`
+        };
+    }
+
+
+    const command =
+        filesystem === "xfs"
+            ? "mkfs.xfs"
+            : "mkfs.ext4";
+
+
+    await runLvmCommand(
+        command,
+        [
+            lv.path
+        ]
+    );
+
+
+    // Verify
+    const detected =
+        await runLvmCommand(
+            "blkid",
+            [
+                "-s",
+                "TYPE",
+                "-o",
+                "value",
+                lv.path
+            ]
+        );
+
+
+    if (
+        detected.trim() !== filesystem
+    ) {
+
+        throw new Error(
+            "FILESYSTEM_VALIDATION_FAILED"
+        );
+    }
+
+
+    return {
+        success: true,
+        data: {
+            device: lv.path,
+            filesystem
+        }
+    };
+}
+
+
+async function mountLogicalVolume(
+    volumeGroup,
+    logicalVolume,
+    mountPoint
+) {
+
+    // LinuxFlow-managed mount points only
+    if (
+        typeof mountPoint !== "string" ||
+        !/^\/mnt\/linuxflow(?:_[a-zA-Z0-9_-]+)?$/
+            .test(mountPoint)
+    ) {
+
+        return {
+            success: false,
+            type: "invalid-mount-point",
+            message:
+                "Mount point must use /mnt/linuxflow or /mnt/linuxflow_<name>"
+        };
+    }
+
+
+    const lvs =
+        await getLogicalVolumes();
+
+
+    const lv =
+        lvs.find(item =>
+            item.volumeGroup === volumeGroup &&
+            item.name === logicalVolume
+        );
+
+
+    if (!lv) {
+
+        return {
+            success: false,
+            type: "not-found",
+            message:
+                "Logical volume not found"
+        };
+    }
+
+
+    // Detect filesystem
+    let filesystem;
+
+    try {
+
+        filesystem =
+            await runLvmCommand(
+                "blkid",
+                [
+                    "-s",
+                    "TYPE",
+                    "-o",
+                    "value",
+                    lv.path
+                ]
+            );
+
+    } catch (_) {
+
+        filesystem = "";
+    }
+
+
+    filesystem =
+        filesystem.trim();
+
+
+    if (!filesystem) {
+
+        return {
+            success: false,
+            type: "no-filesystem",
+            message:
+                "Logical volume does not contain a filesystem"
+        };
+    }
+
+
+    // Check if LV already mounted
+    try {
+
+        const mounted =
+            await runLvmCommand(
+                "findmnt",
+                [
+                    "-n",
+                    "-S",
+                    lv.path
+                ]
+            );
+
+
+        if (mounted) {
+
+            return {
+                success: false,
+                type: "already-mounted",
+                message:
+                    "Logical volume is already mounted"
+            };
+        }
+
+    } catch (_) {
+        // findmnt returns non-zero when not mounted
+    }
+
+
+    await fs.promises.mkdir(
+        mountPoint,
+        {
+            recursive: true
+        }
+    );
+
+
+    // Mount first.
+    await runLvmCommand(
+        "mount",
+        [
+            lv.path,
+            mountPoint
+        ]
+    );
+
+
+    try {
+
+        // Add persistence only after successful mount.
+        const fstabResult =
+            await addFstabEntry({
+                source: lv.path,
+                target: mountPoint,
+                filesystem,
+                options: "defaults",
+                dump: 0,
+                pass:
+                    filesystem === "ext4"
+                        ? 2
+                        : 0
+            });
+
+
+        if (!fstabResult.success) {
+
+            // Roll back mount if persistence failed.
+            try {
+                await runLvmCommand(
+                    "umount",
+                    [mountPoint]
+                );
+            } catch (_) {}
+
+
+            return fstabResult;
+        }
+
+
+        return {
+            success: true,
+
+            data: {
+                device: lv.path,
+                mountPoint,
+                filesystem,
+                persistent: true
+            }
+        };
+
+
+    } catch (error) {
+
+        try {
+            await runLvmCommand(
+                "umount",
+                [mountPoint]
+            );
+        } catch (_) {}
+
+        throw error;
+    }
+}
+
+
+
+async function unmountLogicalVolume(
+    volumeGroup,
+    logicalVolume,
+    removeDirectory = true
+) {
+
+    const lvs =
+        await getLogicalVolumes();
+
+
+    const lv =
+        lvs.find(item =>
+            item.volumeGroup === volumeGroup &&
+            item.name === logicalVolume
+        );
+
+
+    if (!lv) {
+
+        return {
+            success: false,
+            type: "not-found",
+            message:
+                "Logical volume not found"
+        };
+    }
+
+
+    let mountPoint = null;
+
+
+    try {
+
+        mountPoint =
+            await runLvmCommand(
+                "findmnt",
+                [
+                    "-n",
+                    "-o",
+                    "TARGET",
+                    "-S",
+                    lv.path
+                ]
+            );
+
+        mountPoint =
+            mountPoint.trim();
+
+    } catch (_) {
+
+        mountPoint = null;
+    }
+
+
+    // Remove persistence entry first
+    const fstabEntry =
+        await findFstabEntry(
+            lv.path
+        );
+
+
+    if (fstabEntry) {
+
+        await removeFstabEntry(
+            lv.path
+        );
+    }
+
+
+    if (mountPoint) {
+
+        await runLvmCommand(
+            "umount",
+            [mountPoint]
+        );
+    }
+
+
+    if (
+        removeDirectory &&
+        mountPoint &&
+        /^\/mnt\/linuxflow(?:_[a-zA-Z0-9_-]+)?$/
+            .test(mountPoint)
+    ) {
+
+        try {
+
+            await fs.promises.rmdir(
+                mountPoint
+            );
+
+        } catch (_) {
+
+            // Keep directory if not empty.
+        }
+    }
+
+
+    return {
+        success: true,
+        data: {
+            device: lv.path,
+            mountPoint,
+            persistentEntryRemoved:
+                Boolean(fstabEntry)
+        }
+    };
+}
+
+
 
 module.exports = {
     getPhysicalVolumes,
@@ -803,5 +1282,8 @@ module.exports = {
 createLogicalVolume,
 removeLogicalVolume,
 removeVolumeGroup,
-removePhysicalVolume
+removePhysicalVolume,
+createFilesystem,
+mountLogicalVolume,
+unmountLogicalVolume
 };

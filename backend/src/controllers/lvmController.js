@@ -530,6 +530,167 @@ async function removePhysicalVolume(req, res) {
 }
 
 
+async function createFilesystem(req, res) {
+
+    try {
+
+        const {
+            volumeGroup,
+            logicalVolume,
+            filesystem,
+            confirmation
+        } = req.body;
+
+
+        const requiredConfirmation =
+            `FORMAT ${volumeGroup}/${logicalVolume}`;
+
+
+        if (
+            confirmation !==
+            requiredConfirmation
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid filesystem creation confirmation",
+                requiredConfirmation
+            });
+        }
+
+
+        const result =
+            await lvmService
+                .createFilesystem(
+                    volumeGroup,
+                    logicalVolume,
+                    filesystem
+                );
+
+
+        if (!result.success) {
+
+            return res.status(409).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+
+        return res.status(201).json({
+            success: true,
+            message:
+                "Filesystem created successfully",
+            data: result.data
+        });
+
+
+    } catch (error) {
+
+        return handleError(
+            res,
+            error,
+            "Unable to create filesystem"
+        );
+    }
+}
+
+
+async function mountLogicalVolume(req, res) {
+
+    try {
+
+        const {
+            volumeGroup,
+            logicalVolume,
+            mountPoint
+        } = req.body;
+
+
+        const result =
+            await lvmService
+                .mountLogicalVolume(
+                    volumeGroup,
+                    logicalVolume,
+                    mountPoint
+                );
+
+
+        if (!result.success) {
+
+            return res.status(409).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+
+        return res.status(201).json({
+            success: true,
+            message:
+                "Logical volume mounted successfully",
+            data: result.data
+        });
+
+
+    } catch (error) {
+
+        return handleError(
+            res,
+            error,
+            "Unable to mount logical volume"
+        );
+    }
+}
+
+
+async function unmountLogicalVolume(req, res) {
+
+    try {
+
+        const {
+            volumeGroup,
+            logicalVolume
+        } = req.body;
+
+
+        const result =
+            await lvmService
+                .unmountLogicalVolume(
+                    volumeGroup,
+                    logicalVolume
+                );
+
+
+        if (!result.success) {
+
+            return res.status(409).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+
+        return res.status(200).json({
+            success: true,
+            message:
+                "Logical volume unmounted successfully",
+            data: result.data
+        });
+
+
+    } catch (error) {
+
+        return handleError(
+            res,
+            error,
+            "Unable to unmount logical volume"
+        );
+    }
+}
+
+
 module.exports = {
     getOverview,
     getPhysicalVolumes,
@@ -541,6 +702,9 @@ module.exports = {
 createLogicalVolume,
 removeLogicalVolume,
 removeVolumeGroup,
-removePhysicalVolume
+removePhysicalVolume,
+createFilesystem,
+mountLogicalVolume,
+unmountLogicalVolume
 
 };
