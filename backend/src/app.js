@@ -12,7 +12,7 @@ const permissionRoutes = require("./routes/permissionRoutes");
 const aclRoutes =require("./routes/aclRoutes");
 const backupRoutes = require("./routes/backupRoutes");
 const firewallRoutes = require("./routes/firewallRoutes");
-
+const lvmRoutes = require("./routes/lvmRoutes");
 
 
 app.use(cors());
@@ -26,6 +26,7 @@ app.use( "/api/permissions", permissionRoutes);
 app.use( "/api/acl", aclRoutes);
 app.use( "/api/backups", backupRoutes);
 app.use("/api/firewall",firewallRoutes );
+app.use( "/api/lvm", lvmRoutes);
 
 const PORT = process.env.PORT || 5000;
 
