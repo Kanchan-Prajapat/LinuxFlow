@@ -26,5 +26,17 @@ router.post(
     cronController.createJob
 );
 
+
+router.patch(
+    "/managed/:id/status",
+    cronController.setJobStatus
+);
+
+
+router.delete(
+    "/managed/:id",
+    cronController.deleteJob
+);
+
 module.exports =
     router;
