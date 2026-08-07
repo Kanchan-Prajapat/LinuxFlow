@@ -150,9 +150,127 @@ async function getLogicalVolumes(
 }
 
 
+async function inspectDevice(req, res) {
+
+    try {
+
+        const {
+            device
+        } = req.body;
+
+
+        if (
+            typeof device !== "string" ||
+            !device.trim()
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Device path is required"
+            });
+        }
+
+
+        const data =
+            await lvmService
+                .inspectDevice(device);
+
+
+        return res.status(200).json({
+            success: true,
+            data
+        });
+
+
+    } catch (error) {
+
+        return handleError(
+            res,
+            error,
+            "Unable to inspect LVM device"
+        );
+    }
+}
+
+
+async function createPhysicalVolume(
+    req,
+    res
+) {
+
+    try {
+
+        const {
+            device,
+            confirmation
+        } = req.body;
+
+
+        const requiredConfirmation =
+            `CREATE PV ${device}`;
+
+
+        if (
+            confirmation !==
+            requiredConfirmation
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid physical volume creation confirmation",
+                requiredConfirmation
+            });
+        }
+
+
+        const result =
+            await lvmService
+                .createPhysicalVolume(
+                    device
+                );
+
+
+        if (!result.success) {
+
+            return res.status(409).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+
+        return res.status(201).json({
+            success: true,
+            message:
+                `Physical volume '${device}' created successfully`,
+            data: result.data
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Create PV error:",
+            error
+        );
+
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to create physical volume"
+        });
+    }
+}
+
 module.exports = {
     getOverview,
     getPhysicalVolumes,
     getVolumeGroups,
-    getLogicalVolumes
+    getLogicalVolumes,
+    inspectDevice,
+    createPhysicalVolume
+
 };

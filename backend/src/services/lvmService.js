@@ -271,9 +271,178 @@ async function getLvmOverview() {
 }
 
 
+async function inspectDevice(device) {
+
+    // Only normal Linux block-device paths allowed
+    if (
+        typeof device !== "string" ||
+        !/^\/dev\/[a-zA-Z0-9._/-]+$/.test(device)
+    ) {
+        return {
+            safe: false,
+            reason: "Invalid device path"
+        };
+    }
+
+
+    // Get device information
+    let stdout;
+
+    try {
+
+        const result =
+            await execFileAsync(
+                "lsblk",
+                [
+                    "-J",
+                    "-o",
+                    "NAME,PATH,TYPE,FSTYPE,MOUNTPOINTS",
+                    device
+                ],
+                {
+                    timeout: 10000
+                }
+            );
+
+        stdout = result.stdout;
+
+    } catch (error) {
+
+        return {
+            safe: false,
+            reason:
+                "Device does not exist or cannot be inspected"
+        };
+    }
+
+
+    const parsed =
+        JSON.parse(stdout);
+
+    const block =
+        parsed.blockdevices?.[0];
+
+
+    if (!block) {
+
+        return {
+            safe: false,
+            reason:
+                "Device not found"
+        };
+    }
+
+
+    // Require a whole disk
+    if (block.type !== "disk") {
+
+        return {
+            safe: false,
+            reason:
+                "Only whole disks can be initialized as LinuxFlow physical volumes"
+        };
+    }
+
+
+    // Reject filesystem
+    if (block.fstype) {
+
+        return {
+            safe: false,
+            reason:
+                `Device contains filesystem/signature '${block.fstype}'`
+        };
+    }
+
+
+    // Reject mounted disk
+    if (
+        Array.isArray(block.mountpoints) &&
+        block.mountpoints.some(Boolean)
+    ) {
+
+        return {
+            safe: false,
+            reason:
+                "Device is currently mounted"
+        };
+    }
+
+
+    // Reject disks with partitions / LVM children
+    if (
+        Array.isArray(block.children) &&
+        block.children.length > 0
+    ) {
+
+        return {
+            safe: false,
+            reason:
+                "Device contains partitions or existing storage mappings"
+        };
+    }
+
+
+    // Check whether already an LVM PV
+    const pvs =
+        await getPhysicalVolumes();
+
+
+    const existingPv =
+        pvs.some(
+            pv => pv.name === device
+        );
+
+
+    if (existingPv) {
+
+        return {
+            safe: false,
+            reason:
+                "Device is already an LVM physical volume"
+        };
+    }
+
+
+    // Check filesystem/signature using wipefs
+    const wipeResult =
+        await execFileAsync(
+            "wipefs",
+            [
+                "-n",
+                device
+            ],
+            {
+                timeout: 10000
+            }
+        );
+
+
+    if (wipeResult.stdout.trim()) {
+
+        return {
+            safe: false,
+            reason:
+                "Device contains an existing disk signature"
+        };
+    }
+
+
+    return {
+        safe: true,
+        device
+    };
+}
+
+
+
+
+
 module.exports = {
     getPhysicalVolumes,
     getVolumeGroups,
     getLogicalVolumes,
-    getLvmOverview
+    getLvmOverview,
+     inspectDevice,
+    createPhysicalVolume
 };
