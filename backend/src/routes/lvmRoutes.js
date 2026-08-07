@@ -41,4 +41,29 @@ router.post(
     lvmController.createPhysicalVolume
 );
 
+router.post(
+    "/vgs",
+    lvmController.createVolumeGroup
+);
+
+router.post(
+    "/lvs",
+    lvmController.createLogicalVolume
+);
+
+router.delete(
+    "/lvs",
+    lvmController.removeLogicalVolume
+);
+
+router.delete(
+    "/vgs",
+    lvmController.removeVolumeGroup
+);
+
+router.delete(
+    "/pvs",
+    lvmController.removePhysicalVolume
+);
+
 module.exports = router;

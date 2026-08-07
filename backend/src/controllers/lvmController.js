@@ -265,12 +265,282 @@ async function createPhysicalVolume(
     }
 }
 
+
+async function createVolumeGroup(req, res) {
+
+    try {
+
+        const {
+            name,
+            device,
+            confirmation
+        } = req.body;
+
+        const requiredConfirmation =
+            `CREATE VG ${name}`;
+
+        if (
+            confirmation !==
+            requiredConfirmation
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid volume group creation confirmation",
+                requiredConfirmation
+            });
+        }
+
+        const result =
+            await lvmService
+                .createVolumeGroup(
+                    name,
+                    device
+                );
+
+        if (!result.success) {
+            return res.status(409).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+        return res.status(201).json({
+            success: true,
+            message:
+                `Volume group '${name}' created successfully`,
+            data: result.data
+        });
+
+    } catch (error) {
+
+        return handleError(
+            res,
+            error,
+            "Unable to create volume group"
+        );
+    }
+}
+
+
+async function createLogicalVolume(req, res) {
+
+    try {
+
+        const {
+            volumeGroup,
+            name,
+            size,
+            confirmation
+        } = req.body;
+
+        const requiredConfirmation =
+            `CREATE LV ${volumeGroup}/${name}`;
+
+        if (
+            confirmation !==
+            requiredConfirmation
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid logical volume creation confirmation",
+                requiredConfirmation
+            });
+        }
+
+        const result =
+            await lvmService
+                .createLogicalVolume(
+                    volumeGroup,
+                    name,
+                    size
+                );
+
+        if (!result.success) {
+            return res.status(409).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+        return res.status(201).json({
+            success: true,
+            message:
+                `Logical volume '${name}' created successfully`,
+            data: result.data
+        });
+
+    } catch (error) {
+
+        return handleError(
+            res,
+            error,
+            "Unable to create logical volume"
+        );
+    }
+}
+
+
+async function removeLogicalVolume(req, res) {
+
+    try {
+
+        const {
+            volumeGroup,
+            name,
+            confirmation
+        } = req.body;
+
+        const requiredConfirmation =
+            `DELETE LV ${volumeGroup}/${name}`;
+
+        if (confirmation !== requiredConfirmation) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid deletion confirmation",
+                requiredConfirmation
+            });
+        }
+
+        const result =
+            await lvmService
+                .removeLogicalVolume(
+                    volumeGroup,
+                    name
+                );
+
+        if (!result.success) {
+            return res.status(409).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+        return res.json({
+            success: true,
+            message:
+                `Logical volume '${name}' removed successfully`
+        });
+
+    } catch (error) {
+
+        return handleError(
+            res,
+            error,
+            "Unable to remove logical volume"
+        );
+    }
+}
+
+
+async function removeVolumeGroup(req, res) {
+
+    try {
+
+        const {
+            name,
+            confirmation
+        } = req.body;
+
+        const requiredConfirmation =
+            `DELETE VG ${name}`;
+
+        if (confirmation !== requiredConfirmation) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid deletion confirmation",
+                requiredConfirmation
+            });
+        }
+
+        const result =
+            await lvmService
+                .removeVolumeGroup(name);
+
+        if (!result.success) {
+            return res.status(409).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+        return res.json({
+            success: true,
+            message:
+                `Volume group '${name}' removed successfully`
+        });
+
+    } catch (error) {
+
+        return handleError(
+            res,
+            error,
+            "Unable to remove volume group"
+        );
+    }
+}
+
+
+async function removePhysicalVolume(req, res) {
+
+    try {
+
+        const {
+            device,
+            confirmation
+        } = req.body;
+
+        const requiredConfirmation =
+            `DELETE PV ${device}`;
+
+        if (confirmation !== requiredConfirmation) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid deletion confirmation",
+                requiredConfirmation
+            });
+        }
+
+        const result =
+            await lvmService
+                .removePhysicalVolume(device);
+
+        if (!result.success) {
+            return res.status(409).json({
+                success: false,
+                message: result.message
+            });
+        }
+
+        return res.json({
+            success: true,
+            message:
+                `Physical volume '${device}' removed successfully`
+        });
+
+    } catch (error) {
+
+        return handleError(
+            res,
+            error,
+            "Unable to remove physical volume"
+        );
+    }
+}
+
+
 module.exports = {
     getOverview,
     getPhysicalVolumes,
     getVolumeGroups,
     getLogicalVolumes,
     inspectDevice,
-    createPhysicalVolume
+    createPhysicalVolume,
+    createVolumeGroup,
+createLogicalVolume,
+removeLogicalVolume,
+removeVolumeGroup,
+removePhysicalVolume
 
 };
