@@ -488,11 +488,320 @@ async function createPhysicalVolume(
     };
 }
 
+
+async function createVolumeGroup(name, device) {
+
+    if (
+        typeof name !== "string" ||
+        !/^[a-zA-Z0-9_+.-]+$/.test(name)
+    ) {
+        return {
+            success: false,
+            type: "invalid-name",
+            message: "Invalid volume group name"
+        };
+    }
+
+    const pvs = await getPhysicalVolumes();
+
+    const pv = pvs.find(
+        item => item.name === device
+    );
+
+    if (!pv) {
+        return {
+            success: false,
+            type: "pv-not-found",
+            message: `Physical volume '${device}' not found`
+        };
+    }
+
+    if (pv.volumeGroup) {
+        return {
+            success: false,
+            type: "pv-in-use",
+            message:
+                `Physical volume '${device}' already belongs to volume group '${pv.volumeGroup}'`
+        };
+    }
+
+    const existingVgs =
+        await getVolumeGroups();
+
+    if (
+        existingVgs.some(
+            vg => vg.name === name
+        )
+    ) {
+        return {
+            success: false,
+            type: "exists",
+            message:
+                `Volume group '${name}' already exists`
+        };
+    }
+
+    await runLvmCommand(
+        "vgcreate",
+        [name, device]
+    );
+
+    const vgs =
+        await getVolumeGroups();
+
+    const created =
+        vgs.find(vg => vg.name === name);
+
+    if (!created) {
+        throw new Error(
+            "VG_CREATION_VALIDATION_FAILED"
+        );
+    }
+
+    return {
+        success: true,
+        data: created
+    };
+}
+
+
+async function createLogicalVolume(
+    volumeGroup,
+    name,
+    size
+) {
+
+    if (
+        !/^[a-zA-Z0-9_+.-]+$/.test(
+            volumeGroup
+        ) ||
+        !/^[a-zA-Z0-9_+.-]+$/.test(name)
+    ) {
+        return {
+            success: false,
+            type: "invalid-name",
+            message:
+                "Invalid volume group or logical volume name"
+        };
+    }
+
+    // Allow simple sizes such as:
+    // 512M, 1G, 2G
+    if (
+        typeof size !== "string" ||
+        !/^[1-9][0-9]*(M|G)$/i.test(size)
+    ) {
+        return {
+            success: false,
+            type: "invalid-size",
+            message:
+                "Invalid logical volume size"
+        };
+    }
+
+    const vgs =
+        await getVolumeGroups();
+
+    const vg =
+        vgs.find(
+            item =>
+                item.name === volumeGroup
+        );
+
+    if (!vg) {
+        return {
+            success: false,
+            type: "vg-not-found",
+            message:
+                `Volume group '${volumeGroup}' not found`
+        };
+    }
+
+    const lvs =
+        await getLogicalVolumes();
+
+    if (
+        lvs.some(
+            lv =>
+                lv.volumeGroup === volumeGroup &&
+                lv.name === name
+        )
+    ) {
+        return {
+            success: false,
+            type: "exists",
+            message:
+                `Logical volume '${name}' already exists`
+        };
+    }
+
+    await runLvmCommand(
+        "lvcreate",
+        [
+            "-L",
+            size,
+            "-n",
+            name,
+            volumeGroup,
+            "-y"
+        ]
+    );
+
+    const updated =
+        await getLogicalVolumes();
+
+    const created =
+        updated.find(
+            lv =>
+                lv.volumeGroup === volumeGroup &&
+                lv.name === name
+        );
+
+    if (!created) {
+        throw new Error(
+            "LV_CREATION_VALIDATION_FAILED"
+        );
+    }
+
+    return {
+        success: true,
+        data: created
+    };
+}
+
+
+
+async function removeLogicalVolume(
+    volumeGroup,
+    name
+) {
+
+    const lvs =
+        await getLogicalVolumes();
+
+    const lv =
+        lvs.find(
+            item =>
+                item.volumeGroup === volumeGroup &&
+                item.name === name
+        );
+
+    if (!lv) {
+        return {
+            success: false,
+            type: "not-found",
+            message:
+                `Logical volume '${name}' not found`
+        };
+    }
+
+    await runLvmCommand(
+        "lvremove",
+        [
+            "-y",
+            `${volumeGroup}/${name}`
+        ]
+    );
+
+    return {
+        success: true
+    };
+}
+
+
+async function removeVolumeGroup(name) {
+
+    const vgs =
+        await getVolumeGroups();
+
+    const vg =
+        vgs.find(
+            item => item.name === name
+        );
+
+    if (!vg) {
+        return {
+            success: false,
+            type: "not-found",
+            message:
+                `Volume group '${name}' not found`
+        };
+    }
+
+    if (vg.logicalVolumeCount > 0) {
+        return {
+            success: false,
+            type: "not-empty",
+            message:
+                "Volume group contains logical volumes"
+        };
+    }
+
+    await runLvmCommand(
+        "vgremove",
+        ["-y", name]
+    );
+
+    return {
+        success: true
+    };
+}
+
+
+async function removePhysicalVolume(device) {
+
+    const pvs =
+        await getPhysicalVolumes();
+
+    const pv =
+        pvs.find(
+            item => item.name === device
+        );
+
+    if (!pv) {
+        return {
+            success: false,
+            type: "not-found",
+            message:
+                `Physical volume '${device}' not found`
+        };
+    }
+
+    if (pv.volumeGroup) {
+        return {
+            success: false,
+            type: "in-use",
+            message:
+                `Physical volume '${device}' still belongs to volume group '${pv.volumeGroup}'`
+        };
+    }
+
+    await runLvmCommand(
+        "pvremove",
+        [
+            "-y",
+            device
+        ]
+    );
+
+    return {
+        success: true
+    };
+}
+
+
+
+
 module.exports = {
     getPhysicalVolumes,
     getVolumeGroups,
     getLogicalVolumes,
     getLvmOverview,
      inspectDevice,
-    createPhysicalVolume
+    createPhysicalVolume,
+    createVolumeGroup,
+createLogicalVolume,
+removeLogicalVolume,
+removeVolumeGroup,
+removePhysicalVolume
 };
