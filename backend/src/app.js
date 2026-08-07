@@ -14,6 +14,7 @@ const backupRoutes = require("./routes/backupRoutes");
 const firewallRoutes = require("./routes/firewallRoutes");
 const lvmRoutes = require("./routes/lvmRoutes");
 const swapRoutes = require("./routes/swapRoutes");
+const sshRoutes = require("./routes/sshRoutes");
 
 
 app.use(cors());
@@ -29,6 +30,7 @@ app.use( "/api/backups", backupRoutes);
 app.use("/api/firewall",firewallRoutes );
 app.use( "/api/lvm", lvmRoutes);
 app.use( "/api/swap", swapRoutes);
+app.use( "/api/ssh", sshRoutes);
 
 const PORT = process.env.PORT || 5000;
 
