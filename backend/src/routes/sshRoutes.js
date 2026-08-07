@@ -25,7 +25,16 @@ router.patch(
     sshController.updateSetting
 );
 
+router.post(
+    "/ports",
+    sshController.addPort
+);
 
+
+router.delete(
+    "/ports/:port",
+    sshController.removePort
+);
 
 
 module.exports =

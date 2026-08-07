@@ -10,6 +10,11 @@ const SSH_CONFIG =
 const SSH_BACKUP =
     "/etc/ssh/sshd_config.linuxflow.bak";
 
+const DEFAULT_SSH_PORT = 22;
+
+const MIN_PORT = 1;
+const MAX_PORT = 65535;
+
 async function runCommand(
     command,
     args = []
@@ -574,6 +579,752 @@ async function changeSshSetting(
 
 
 
+// ########################################################
+// SSH Port Helpers
+// ########################################################
+
+function validatePort(port) {
+
+    const parsedPort = Number(port);
+
+    if (
+        !Number.isInteger(parsedPort) ||
+        parsedPort < MIN_PORT ||
+        parsedPort > MAX_PORT
+    ) {
+        return {
+            valid: false,
+            message:
+                "SSH port must be an integer between 1 and 65535"
+        };
+    }
+
+    return {
+        valid: true,
+        port: parsedPort
+    };
+}
+
+
+async function isPortListening(port) {
+
+    try {
+
+        const stdout =
+            await runCommand(
+                "ss",
+                ["-lntH"]
+            );
+
+        const regex =
+            new RegExp(
+                `:${port}\\s`
+            );
+
+        return stdout
+            .split("\n")
+            .some(line =>
+                regex.test(line)
+            );
+
+    } catch (_) {
+
+        return false;
+    }
+}
+
+
+// ########################################################
+// SELinux SSH Port
+// ########################################################
+
+async function ensureSelinuxSshPort(port) {
+
+    let enforcing = false;
+
+    try {
+
+        const mode =
+            await runCommand(
+                "getenforce"
+            );
+
+        enforcing =
+            mode === "Enforcing";
+
+    } catch (_) {}
+
+
+    if (!enforcing) {
+
+        return {
+            required: false,
+            changed: false
+        };
+    }
+
+
+    const ports =
+        await runCommand(
+            "semanage",
+            [
+                "port",
+                "-l"
+            ]
+        );
+
+
+    const sshLine =
+        ports
+            .split("\n")
+            .find(line =>
+                line.trim()
+                    .startsWith(
+                        "ssh_port_t"
+                    )
+            );
+
+
+    if (
+        sshLine &&
+        new RegExp(
+            `\\b${port}\\b`
+        ).test(sshLine)
+    ) {
+
+        return {
+            required: true,
+            changed: false
+        };
+    }
+
+
+    await runCommand(
+        "semanage",
+        [
+            "port",
+            "-a",
+            "-t",
+            "ssh_port_t",
+            "-p",
+            "tcp",
+            String(port)
+        ]
+    );
+
+
+    return {
+        required: true,
+        changed: true
+    };
+}
+
+
+// ########################################################
+// Firewalld SSH Port
+// ########################################################
+
+async function ensureFirewallSshPort(port) {
+
+    let running = false;
+
+    try {
+
+        const state =
+            await runCommand(
+                "firewall-cmd",
+                ["--state"]
+            );
+
+        running =
+            state === "running";
+
+    } catch (_) {}
+
+
+    if (!running) {
+
+        return {
+            required: false,
+            changed: false
+        };
+    }
+
+
+    try {
+
+        await runCommand(
+            "firewall-cmd",
+            [
+                "--quiet",
+                "--query-port",
+                `${port}/tcp`
+            ]
+        );
+
+
+        return {
+            required: true,
+            changed: false
+        };
+
+
+    } catch (_) {
+
+        await runCommand(
+            "firewall-cmd",
+            [
+                "--permanent",
+                "--add-port",
+                `${port}/tcp`
+            ]
+        );
+
+
+        await runCommand(
+            "firewall-cmd",
+            [
+                "--add-port",
+                `${port}/tcp`
+            ]
+        );
+
+
+        return {
+            required: true,
+            changed: true
+        };
+    }
+}
+
+
+
+// ########################################################
+// Add SSH Port
+// ########################################################
+
+async function addSshPort(port) {
+
+    const validation =
+        validatePort(port);
+
+
+    if (!validation.valid) {
+
+        return {
+            success: false,
+            type: "invalid-port",
+            message:
+                validation.message
+        };
+    }
+
+
+    const newPort =
+        validation.port;
+
+
+    // ----------------------------------------------------
+    // Read current effective SSH ports
+    // ----------------------------------------------------
+
+    const effectiveConfig =
+        await runCommand(
+            "sshd",
+            ["-T"]
+        );
+
+
+    const existingPorts =
+        effectiveConfig
+            .split("\n")
+            .filter(line =>
+                line.startsWith("port ")
+            )
+            .map(line =>
+                Number(
+                    line.split(/\s+/)[1]
+                )
+            );
+
+
+    if (
+        existingPorts.includes(
+            newPort
+        )
+    ) {
+
+        return {
+            success: false,
+            type: "already-configured",
+            message:
+                `SSH port ${newPort} is already configured`
+        };
+    }
+
+
+    // ----------------------------------------------------
+    // Port must not already belong to another service
+    // ----------------------------------------------------
+
+    if (
+        await isPortListening(
+            newPort
+        )
+    ) {
+
+        return {
+            success: false,
+            type: "port-in-use",
+            message:
+                `Port ${newPort} is already in use`
+        };
+    }
+
+
+    await backupSshConfiguration();
+
+
+    const originalContent =
+        await fs.promises.readFile(
+            SSH_CONFIG,
+            "utf8"
+        );
+
+
+    let selinuxResult = null;
+    let firewallResult = null;
+
+
+    try {
+
+        // ------------------------------------------------
+        // Prepare SELinux
+        // ------------------------------------------------
+
+        selinuxResult =
+            await ensureSelinuxSshPort(
+                newPort
+            );
+
+
+        // ------------------------------------------------
+        // Prepare firewall
+        // ------------------------------------------------
+
+        firewallResult =
+            await ensureFirewallSshPort(
+                newPort
+            );
+
+
+        // ------------------------------------------------
+        // IMPORTANT:
+        // Keep existing SSH port and ADD the new one.
+        // ------------------------------------------------
+
+        let updatedContent =
+            originalContent;
+
+
+        // If no explicit Port directive exists,
+        // make default port 22 explicit first.
+
+        const explicitPortRegex =
+            /^\s*Port\s+\d+\s*$/im;
+
+
+        if (
+            !explicitPortRegex.test(
+                updatedContent
+            )
+        ) {
+
+            updatedContent +=
+                `\nPort ${DEFAULT_SSH_PORT}\n`;
+        }
+
+
+        updatedContent +=
+            `Port ${newPort}\n`;
+
+
+        await fs.promises.writeFile(
+            SSH_CONFIG,
+            updatedContent,
+            "utf8"
+        );
+
+
+        // ------------------------------------------------
+        // Validate configuration BEFORE reload
+        // ------------------------------------------------
+
+        const configValidation =
+            await validateSshConfiguration();
+
+
+        if (!configValidation.valid) {
+
+            await fs.promises.writeFile(
+                SSH_CONFIG,
+                originalContent,
+                "utf8"
+            );
+
+
+            return {
+                success: false,
+                type: "validation-failed",
+                message:
+                    "SSH configuration validation failed and was rolled back",
+                error:
+                    configValidation.error
+            };
+        }
+
+
+        // ------------------------------------------------
+        // Reload sshd
+        // ------------------------------------------------
+
+        await runCommand(
+            "systemctl",
+            [
+                "reload",
+                "sshd"
+            ]
+        );
+
+
+        // Give sshd a moment to update listeners.
+        await new Promise(resolve =>
+            setTimeout(resolve, 500)
+        );
+
+
+        // ------------------------------------------------
+        // Verify new listener
+        // ------------------------------------------------
+
+        const listening =
+            await isPortListening(
+                newPort
+            );
+
+
+        if (!listening) {
+
+            await fs.promises.writeFile(
+                SSH_CONFIG,
+                originalContent,
+                "utf8"
+            );
+
+
+            try {
+
+                await runCommand(
+                    "systemctl",
+                    [
+                        "reload",
+                        "sshd"
+                    ]
+                );
+
+            } catch (_) {}
+
+
+            return {
+                success: false,
+                type: "listener-failed",
+                message:
+                    `sshd did not start listening on port ${newPort}. Configuration was rolled back.`
+            };
+        }
+
+
+        return {
+            success: true,
+
+            data: {
+                newPort,
+
+                oldPortPreserved: true,
+
+                selinux:
+                    selinuxResult,
+
+                firewall:
+                    firewallResult,
+
+                validated: true,
+                reloaded: true,
+                listening: true
+            }
+        };
+
+
+    } catch (error) {
+
+        // Restore sshd_config
+        await fs.promises.writeFile(
+            SSH_CONFIG,
+            originalContent,
+            "utf8"
+        );
+
+
+        try {
+
+            await runCommand(
+                "systemctl",
+                [
+                    "reload",
+                    "sshd"
+                ]
+            );
+
+        } catch (_) {}
+
+
+        throw error;
+    }
+}
+
+
+// ########################################################
+// Remove SSH Port
+// ########################################################
+
+async function removeSshPort(port) {
+
+    const validation = validatePort(port);
+
+    if (!validation.valid) {
+        return {
+            success: false,
+            type: "invalid-port",
+            message: validation.message
+        };
+    }
+
+    const removePort = validation.port;
+
+
+    // Never allow LinuxFlow to remove the fallback port.
+    if (removePort === DEFAULT_SSH_PORT) {
+        return {
+            success: false,
+            type: "protected-port",
+            message:
+                `SSH port ${DEFAULT_SSH_PORT} is protected and cannot be removed`
+        };
+    }
+
+
+    const originalContent =
+        await fs.promises.readFile(
+            SSH_CONFIG,
+            "utf8"
+        );
+
+
+    const portRegex =
+        new RegExp(
+            `^\\s*Port\\s+${removePort}\\s*$`,
+            "im"
+        );
+
+
+    if (!portRegex.test(originalContent)) {
+        return {
+            success: false,
+            type: "not-configured",
+            message:
+                `SSH port ${removePort} is not explicitly configured`
+        };
+    }
+
+
+    // Remove only this exact Port directive.
+    const updatedContent =
+        originalContent
+            .split("\n")
+            .filter(line => {
+
+                const regex =
+                    new RegExp(
+                        `^\\s*Port\\s+${removePort}\\s*$`,
+                        "i"
+                    );
+
+                return !regex.test(line);
+            })
+            .join("\n");
+
+
+    try {
+
+        await fs.promises.writeFile(
+            SSH_CONFIG,
+            updatedContent,
+            "utf8"
+        );
+
+
+        // Validate BEFORE reload.
+        const configValidation =
+            await validateSshConfiguration();
+
+
+        if (!configValidation.valid) {
+
+            await fs.promises.writeFile(
+                SSH_CONFIG,
+                originalContent,
+                "utf8"
+            );
+
+            return {
+                success: false,
+                type: "validation-failed",
+                message:
+                    "SSH configuration validation failed. Changes were rolled back.",
+                error:
+                    configValidation.error
+            };
+        }
+
+
+        await runCommand(
+            "systemctl",
+            [
+                "reload",
+                "sshd"
+            ]
+        );
+
+
+        await new Promise(resolve =>
+            setTimeout(resolve, 500)
+        );
+
+
+        // Port should no longer be listening.
+        const stillListening =
+            await isPortListening(
+                removePort
+            );
+
+
+        if (stillListening) {
+
+            await fs.promises.writeFile(
+                SSH_CONFIG,
+                originalContent,
+                "utf8"
+            );
+
+            try {
+                await runCommand(
+                    "systemctl",
+                    ["reload", "sshd"]
+                );
+            } catch (_) {}
+
+            return {
+                success: false,
+                type: "listener-still-active",
+                message:
+                    `SSH port ${removePort} remained active. Configuration was rolled back.`
+            };
+        }
+
+
+        // Remove firewalld rule.
+        try {
+
+            await runCommand(
+                "firewall-cmd",
+                [
+                    "--remove-port",
+                    `${removePort}/tcp`
+                ]
+            );
+
+            await runCommand(
+                "firewall-cmd",
+                [
+                    "--permanent",
+                    "--remove-port",
+                    `${removePort}/tcp`
+                ]
+            );
+
+        } catch (_) {
+            // SSH configuration itself is already safely updated.
+        }
+
+
+        // Remove SELinux mapping created for alternate SSH port.
+        try {
+
+            await runCommand(
+                "semanage",
+                [
+                    "port",
+                    "-d",
+                    "-t",
+                    "ssh_port_t",
+                    "-p",
+                    "tcp",
+                    String(removePort)
+                ]
+            );
+
+        } catch (_) {
+            // Don't fail the entire operation only because cleanup
+            // could not remove an SELinux mapping.
+        }
+
+
+        return {
+            success: true,
+
+            data: {
+                removedPort: removePort,
+                defaultPortPreserved:
+                    DEFAULT_SSH_PORT,
+                validated: true,
+                reloaded: true,
+                listenerRemoved: true
+            }
+        };
+
+
+    } catch (error) {
+
+        await fs.promises.writeFile(
+            SSH_CONFIG,
+            originalContent,
+            "utf8"
+        );
+
+        try {
+            await runCommand(
+                "systemctl",
+                ["reload", "sshd"]
+            );
+        } catch (_) {}
+
+        throw error;
+    }
+}
+
+
+
+
 module.exports = {
     getSshStatus,
     getSshConfiguration,
@@ -581,5 +1332,7 @@ module.exports = {
      getActiveSshSessions,
        backupSshConfiguration,
     validateSshConfiguration,
-    changeSshSetting
+    changeSshSetting,
+    addSshPort,
+    removeSshPort
 };
