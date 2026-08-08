@@ -169,7 +169,7 @@ try {
         lvmService.getPhysicalVolumes(),
         lvmService.getVolumeGroups(),
         lvmService.getLogicalVolumes(),
-        lvmService.getLVMOverview()
+        lvmService.getLvmOverview()
     ]);
 
 
