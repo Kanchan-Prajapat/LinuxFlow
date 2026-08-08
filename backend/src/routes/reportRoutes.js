@@ -49,7 +49,10 @@ router.get(
     reportController.exportReportAsText
 );
 
-
+router.get(
+    "/history/:id/export/html",
+    reportController.exportReportAsHtml
+);
 
 module.exports =
     router;
