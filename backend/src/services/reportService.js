@@ -910,7 +910,458 @@ async function exportReportAsText(id) {
 }
 
 
+// ########################################################
+// Export Report as HTML
+// ########################################################
 
+async function exportReportAsHtml(id) {
+
+    const result =
+        await getReport(id);
+
+
+    if (!result.success) {
+        return result;
+    }
+
+
+    await fs.promises.mkdir(
+        REPORT_EXPORT_DIRECTORY,
+        {
+            recursive: true,
+            mode: 0o700
+        }
+    );
+
+
+    const report =
+        result.data.report;
+
+
+    const escapeHtml = (value) => {
+
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    };
+
+
+    const diskRows =
+        Array.isArray(report.disk)
+            ? report.disk.map(disk => `
+                <tr>
+                    <td>${escapeHtml(disk.mountPoint)}</td>
+                    <td>${escapeHtml(disk.size)}</td>
+                    <td>${escapeHtml(disk.used)}</td>
+                    <td>${escapeHtml(disk.available)}</td>
+                    <td>${escapeHtml(disk.usagePercent)}%</td>
+                    <td>${escapeHtml(disk.status)}</td>
+                </tr>
+            `).join("")
+            : `
+                <tr>
+                    <td colspan="6">
+                        Disk information unavailable
+                    </td>
+                </tr>
+            `;
+
+
+    const alerts =
+        Array.isArray(report.alerts?.alerts)
+            ? report.alerts.alerts.map(alert => `
+                <li>
+                    <strong>
+                        ${escapeHtml(alert.severity)}
+                    </strong>
+                    -
+                    ${escapeHtml(alert.message)}
+                </li>
+            `).join("")
+            : "<li>No alerts</li>";
+
+
+    const html = `
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0">
+
+<title>LinuxFlow System Report</title>
+
+<style>
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 30px;
+    background: #f5f7fa;
+    color: #1f2937;
+}
+
+.container {
+    max-width: 1100px;
+    margin: auto;
+}
+
+h1 {
+    margin-bottom: 5px;
+}
+
+.subtitle {
+    color: #6b7280;
+    margin-bottom: 30px;
+}
+
+.card {
+    background: white;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 10px;
+    box-shadow:
+        0 2px 8px rgba(0,0,0,0.08);
+}
+
+.grid {
+    display: grid;
+    grid-template-columns:
+        repeat(auto-fit, minmax(220px, 1fr));
+    gap: 15px;
+}
+
+.stat {
+    padding: 15px;
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.stat strong {
+    display: block;
+    margin-bottom: 6px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+th {
+    background: #f8fafc;
+}
+
+ul {
+    padding-left: 20px;
+}
+
+.footer {
+    text-align: center;
+    color: #6b7280;
+    margin-top: 30px;
+    font-size: 13px;
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+<div class="container">
+
+<h1>LinuxFlow System Report</h1>
+
+<div class="subtitle">
+
+Report ID:
+${escapeHtml(result.data.id)}
+
+<br>
+
+Generated:
+${escapeHtml(result.data.createdAt)}
+
+</div>
+
+
+<!-- SYSTEM -->
+
+<div class="card">
+
+<h2>System</h2>
+
+<div class="grid">
+
+<div class="stat">
+<strong>Hostname</strong>
+${escapeHtml(report.system?.hostname)}
+</div>
+
+<div class="stat">
+<strong>Platform</strong>
+${escapeHtml(report.system?.platform)}
+</div>
+
+<div class="stat">
+<strong>Architecture</strong>
+${escapeHtml(report.system?.architecture)}
+</div>
+
+<div class="stat">
+<strong>Kernel</strong>
+${escapeHtml(report.system?.kernel)}
+</div>
+
+</div>
+
+</div>
+
+
+<!-- CPU -->
+
+<div class="card">
+
+<h2>CPU</h2>
+
+<div class="grid">
+
+<div class="stat">
+<strong>Cores</strong>
+${escapeHtml(report.overview?.cpu?.cores)}
+</div>
+
+<div class="stat">
+<strong>Usage</strong>
+${escapeHtml(report.overview?.cpu?.usagePercent)}%
+</div>
+
+<div class="stat">
+<strong>Load Average</strong>
+${escapeHtml(
+    report.overview?.cpu?.loadAverage?.join(", ")
+)}
+
+</div>
+
+</div>
+
+</div>
+
+
+<!-- MEMORY -->
+
+<div class="card">
+
+<h2>Memory</h2>
+
+<div class="grid">
+
+<div class="stat">
+<strong>Total</strong>
+${escapeHtml(report.overview?.memory?.total)}
+</div>
+
+<div class="stat">
+<strong>Used</strong>
+${escapeHtml(report.overview?.memory?.used)}
+</div>
+
+<div class="stat">
+<strong>Free</strong>
+${escapeHtml(report.overview?.memory?.free)}
+</div>
+
+<div class="stat">
+<strong>Usage</strong>
+${escapeHtml(
+    report.overview?.memory?.usagePercent
+)}%
+
+</div>
+
+</div>
+
+</div>
+
+
+<!-- HEALTH -->
+
+<div class="card">
+
+<h2>System Health</h2>
+
+<div class="stat">
+
+<strong>Status</strong>
+
+${escapeHtml(
+    report.health?.status
+)}
+
+</div>
+
+</div>
+
+
+<!-- DISK -->
+
+<div class="card">
+
+<h2>Disk Usage</h2>
+
+<table>
+
+<thead>
+
+<tr>
+<th>Mount Point</th>
+<th>Size</th>
+<th>Used</th>
+<th>Available</th>
+<th>Usage</th>
+<th>Status</th>
+</tr>
+
+</thead>
+
+<tbody>
+
+${diskRows}
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<!-- MONITORING -->
+
+<div class="card">
+
+<h2>Process Monitoring</h2>
+
+<div class="grid">
+
+<div class="stat">
+<strong>Total</strong>
+${escapeHtml(
+    report.monitoring?.processes?.total
+)}
+</div>
+
+<div class="stat">
+<strong>Running</strong>
+${escapeHtml(
+    report.monitoring?.processes?.running
+)}
+</div>
+
+<div class="stat">
+<strong>Sleeping</strong>
+${escapeHtml(
+    report.monitoring?.processes?.sleeping
+)}
+</div>
+
+<div class="stat">
+<strong>Zombie</strong>
+${escapeHtml(
+    report.monitoring?.processes?.zombie
+)}
+</div>
+
+</div>
+
+</div>
+
+
+<!-- ALERTS -->
+
+<div class="card">
+
+<h2>Alerts</h2>
+
+<p>
+
+<strong>Status:</strong>
+
+${escapeHtml(
+    report.alerts?.status
+)}
+
+</p>
+
+<ul>
+
+${alerts}
+
+</ul>
+
+</div>
+
+
+<div class="footer">
+
+Generated by LinuxFlow
+
+</div>
+
+</div>
+
+</body>
+
+</html>
+`;
+
+
+    const filename =
+        `linuxflow-report-${id}.html`;
+
+
+    const filepath =
+        path.join(
+            REPORT_EXPORT_DIRECTORY,
+            filename
+        );
+
+
+    await fs.promises.writeFile(
+        filepath,
+        html,
+        {
+            encoding: "utf8",
+            mode: 0o600
+        }
+    );
+
+
+    return {
+        success: true,
+
+        data: {
+            id,
+            filename,
+            path: filepath
+        }
+    };
+}
 
 module.exports = {
     generateSystemReport,
@@ -918,5 +1369,6 @@ module.exports = {
 listReports,
 getReport,
 deleteReport,
-exportReportAsText
+exportReportAsText,
+exportReportAsHtml
 };

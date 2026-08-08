@@ -318,11 +318,67 @@ async function exportReportAsText(
 }
 
 
+async function exportReportAsHtml(
+    req,
+    res
+) {
+
+    try {
+
+        const result =
+            await reportService
+                .exportReportAsHtml(
+                    req.params.id
+                );
+
+
+        if (!result.success) {
+
+            return res.status(
+                result.type === "invalid-id"
+                    ? 400
+                    : 404
+            ).json({
+                success: false,
+                message:
+                    result.message
+            });
+        }
+
+
+        return res.status(200).json({
+            success: true,
+            message:
+                "Report exported successfully",
+            data:
+                result.data
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "HTML report export error:",
+            error
+        );
+
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to export HTML report"
+        });
+    }
+}
+
+
+
 module.exports = {
     generateReport,
     saveReport,
     listReports,
     getReport,
     deleteReport,
-    exportReportAsText
+    exportReportAsText,
+      exportReportAsHtml
 };
