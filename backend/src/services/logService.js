@@ -9,7 +9,7 @@ const path = require("path");
 const LOG_FILE =
     path.resolve(
         __dirname,
-        "../../logs/activity.log"
+        "../../../logs/activity.log"
     );
 
 
