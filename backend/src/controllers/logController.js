@@ -17,7 +17,9 @@ async function getLogs(
             user,
             host,
             search,
-            limit
+            limit,
+            from,
+            to
         } = req.query;
 
 
@@ -26,7 +28,9 @@ async function getLogs(
                 user,
                 host,
                 search,
-                limit
+                limit,
+                from,
+                to
             });
 
 
@@ -48,7 +52,13 @@ async function getLogs(
                     search || null,
 
                 limit:
-                    limit || null
+                    limit || null,
+
+                from:
+                    from || null,
+
+                to:
+                    to || null
             },
 
             data:
@@ -73,7 +83,6 @@ async function getLogs(
         });
     }
 }
-
 
 // ########################################################
 // Get Recent Logs
