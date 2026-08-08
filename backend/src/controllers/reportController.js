@@ -264,10 +264,65 @@ async function deleteReport(
 }
 
 
+async function exportReportAsText(
+    req,
+    res
+) {
+
+    try {
+
+        const result =
+            await reportService
+                .exportReportAsText(
+                    req.params.id
+                );
+
+
+        if (!result.success) {
+
+            return res.status(
+                result.type === "invalid-id"
+                    ? 400
+                    : 404
+            ).json({
+                success: false,
+                message:
+                    result.message
+            });
+        }
+
+
+        return res.status(200).json({
+            success: true,
+            message:
+                "Report exported successfully",
+            data:
+                result.data
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Report export error:",
+            error
+        );
+
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Unable to export report"
+        });
+    }
+}
+
+
 module.exports = {
     generateReport,
     saveReport,
     listReports,
     getReport,
-    deleteReport
+    deleteReport,
+    exportReportAsText
 };

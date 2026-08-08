@@ -5,6 +5,9 @@ const crypto = require("crypto");
 const REPORT_DIRECTORY =
     "/var/lib/linuxflow/reports";
 
+const REPORT_EXPORT_DIRECTORY =
+    "/var/lib/linuxflow/reports/exports";
+
 const systemService =
     require("./systemService");
 
@@ -620,6 +623,292 @@ async function deleteReport(id) {
     }
 }
 
+// ########################################################
+// Export Report as TXT
+// ########################################################
+
+async function exportReportAsText(id) {
+
+    const result =
+        await getReport(id);
+
+
+    if (!result.success) {
+        return result;
+    }
+
+
+    await fs.promises.mkdir(
+        REPORT_EXPORT_DIRECTORY,
+        {
+            recursive: true,
+            mode: 0o700
+        }
+    );
+
+
+    const report =
+        result.data.report;
+
+
+    const lines = [];
+
+
+    lines.push(
+        "============================================================"
+    );
+
+    lines.push(
+        "                    LINUXFLOW SYSTEM REPORT"
+    );
+
+    lines.push(
+        "============================================================"
+    );
+
+    lines.push(
+        `Report ID: ${result.data.id}`
+    );
+
+    lines.push(
+        `Generated At: ${result.data.createdAt}`
+    );
+
+    lines.push("");
+
+
+    // System
+    lines.push(
+        "-------------------- SYSTEM --------------------"
+    );
+
+    lines.push(
+        `Hostname: ${report.system?.hostname ?? "N/A"}`
+    );
+
+    lines.push(
+        `Platform: ${report.system?.platform ?? "N/A"}`
+    );
+
+    lines.push(
+        `Architecture: ${report.system?.architecture ?? "N/A"}`
+    );
+
+    lines.push(
+        `Kernel: ${report.system?.kernel ?? "N/A"}`
+    );
+
+    lines.push("");
+
+
+    // CPU
+    lines.push(
+        "-------------------- CPU --------------------"
+    );
+
+    lines.push(
+        `Cores: ${report.overview?.cpu?.cores ?? "N/A"}`
+    );
+
+    lines.push(
+        `Usage: ${report.overview?.cpu?.usagePercent ?? "N/A"}%`
+    );
+
+    lines.push(
+        `Load Average: ${
+            report.overview?.cpu?.loadAverage?.join(", ")
+            ?? "N/A"
+        }`
+    );
+
+    lines.push("");
+
+
+    // Memory
+    lines.push(
+        "-------------------- MEMORY --------------------"
+    );
+
+    lines.push(
+        `Total: ${report.overview?.memory?.total ?? "N/A"}`
+    );
+
+    lines.push(
+        `Used: ${report.overview?.memory?.used ?? "N/A"}`
+    );
+
+    lines.push(
+        `Free: ${report.overview?.memory?.free ?? "N/A"}`
+    );
+
+    lines.push(
+        `Usage: ${
+            report.overview?.memory?.usagePercent
+            ?? "N/A"
+        }%`
+    );
+
+    lines.push("");
+
+
+    // Health
+    lines.push(
+        "-------------------- HEALTH --------------------"
+    );
+
+    lines.push(
+        `Overall Status: ${
+            report.health?.status ?? "N/A"
+        }`
+    );
+
+    lines.push("");
+
+
+    // Disk
+    lines.push(
+        "-------------------- DISK --------------------"
+    );
+
+    if (Array.isArray(report.disk)) {
+
+        for (const disk of report.disk) {
+
+            lines.push(
+                `${disk.mountPoint} | ` +
+                `${disk.used} / ${disk.size} | ` +
+                `${disk.usagePercent}% | ` +
+                `${disk.status}`
+            );
+        }
+
+    } else {
+
+        lines.push("Disk information unavailable");
+    }
+
+    lines.push("");
+
+
+    // Monitoring
+    lines.push(
+        "-------------------- MONITORING --------------------"
+    );
+
+    lines.push(
+        `Processes: ${
+            report.monitoring?.processes?.total
+            ?? "N/A"
+        }`
+    );
+
+    lines.push(
+        `Running: ${
+            report.monitoring?.processes?.running
+            ?? "N/A"
+        }`
+    );
+
+    lines.push(
+        `Sleeping: ${
+            report.monitoring?.processes?.sleeping
+            ?? "N/A"
+        }`
+    );
+
+    lines.push(
+        `Zombie: ${
+            report.monitoring?.processes?.zombie
+            ?? "N/A"
+        }`
+    );
+
+    lines.push("");
+
+
+    // Alerts
+    lines.push(
+        "-------------------- ALERTS --------------------"
+    );
+
+    lines.push(
+        `Status: ${
+            report.alerts?.status ?? "N/A"
+        }`
+    );
+
+    lines.push(
+        `Count: ${
+            report.alerts?.count ?? "N/A"
+        }`
+    );
+
+
+    if (
+        Array.isArray(
+            report.alerts?.alerts
+        )
+    ) {
+
+        for (
+            const alert
+            of report.alerts.alerts
+        ) {
+
+            lines.push(
+                `[${alert.severity}] ${alert.message}`
+            );
+        }
+    }
+
+
+    lines.push("");
+
+    lines.push(
+        "============================================================"
+    );
+
+    lines.push(
+        "                    END OF REPORT"
+    );
+
+    lines.push(
+        "============================================================"
+    );
+
+
+    const filename =
+        `linuxflow-report-${id}.txt`;
+
+
+    const filepath =
+        path.join(
+            REPORT_EXPORT_DIRECTORY,
+            filename
+        );
+
+
+    await fs.promises.writeFile(
+        filepath,
+        lines.join("\n"),
+        {
+            encoding: "utf8",
+            mode: 0o600
+        }
+    );
+
+
+    return {
+        success: true,
+
+        data: {
+            id,
+            filename,
+            path: filepath
+        }
+    };
+}
+
 
 
 
@@ -628,5 +917,6 @@ module.exports = {
     saveReport,
 listReports,
 getReport,
-deleteReport
+deleteReport,
+exportReportAsText
 };
