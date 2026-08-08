@@ -13,8 +13,25 @@ async function getLogs(
 
     try {
 
+        const {
+            user,
+            host,
+            search,
+            limit,
+            from,
+            to
+        } = req.query;
+
+
         const logs =
-            await logService.getLogs();
+            await logService.getLogs({
+                user,
+                host,
+                search,
+                limit,
+                from,
+                to
+            });
 
 
         return res.status(200).json({
@@ -23,6 +40,26 @@ async function getLogs(
 
             count:
                 logs.length,
+
+            filters: {
+                user:
+                    user || null,
+
+                host:
+                    host || null,
+
+                search:
+                    search || null,
+
+                limit:
+                    limit || null,
+
+                from:
+                    from || null,
+
+                to:
+                    to || null
+            },
 
             data:
                 logs
@@ -46,7 +83,6 @@ async function getLogs(
         });
     }
 }
-
 
 // ########################################################
 // Get Recent Logs
