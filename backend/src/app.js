@@ -18,6 +18,7 @@ const sshRoutes = require("./routes/sshRoutes");
 const cronRoutes = require("./routes/cronRoutes");
 const monitoringRoutes =require("./routes/monitoringRoutes");
 const reportRoutes =require("./routes/reportRoutes");
+const logRoutes = require("./routes/logRoutes");
 
 app.use(cors());
 app.use(express.json());
@@ -36,6 +37,7 @@ app.use( "/api/ssh", sshRoutes);
 app.use( "/api/cron", cronRoutes);
 app.use(  "/api/monitoring", monitoringRoutes);
 app.use("/api/reports", reportRoutes );
+app.use( "/api/logs", logRoutes);
 
 const PORT = process.env.PORT || 5000;
 
