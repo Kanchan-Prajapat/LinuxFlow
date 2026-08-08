@@ -63,7 +63,7 @@ function parseLogLine(line) {
 
 
 // ########################################################
-// Read Logs
+// Get All Logs
 // ########################################################
 
 async function getLogs() {
@@ -102,10 +102,12 @@ async function getLogs() {
 
 
 // ########################################################
-// Recent Logs
+// Get Recent Logs
 // ########################################################
 
-async function getRecentLogs(limit = 20) {
+async function getRecentLogs(
+    limit = 20
+) {
 
     const logs =
         await getLogs();
@@ -121,9 +123,9 @@ async function getRecentLogs(limit = 20) {
         );
 
 
-    return logs.slice(
-        -safeLimit
-    ).reverse();
+    return logs
+        .slice(-safeLimit)
+        .reverse();
 }
 
 
