@@ -17,7 +17,7 @@ const swapRoutes = require("./routes/swapRoutes");
 const sshRoutes = require("./routes/sshRoutes");
 const cronRoutes = require("./routes/cronRoutes");
 const monitoringRoutes =require("./routes/monitoringRoutes");
-
+const reportRoutes =require("./routes/reportRoutes");
 
 app.use(cors());
 app.use(express.json());
@@ -35,7 +35,7 @@ app.use( "/api/swap", swapRoutes);
 app.use( "/api/ssh", sshRoutes);
 app.use( "/api/cron", cronRoutes);
 app.use(  "/api/monitoring", monitoringRoutes);
-
+app.use("/api/reports", reportRoutes );
 
 const PORT = process.env.PORT || 5000;
 
