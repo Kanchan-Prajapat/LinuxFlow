@@ -9,7 +9,14 @@ const router =
     express.Router();
 
 
-// All logs
+// Log statistics
+router.get(
+    "/stats",
+    logController.getLogStats
+);
+
+
+// All logs + filters + pagination
 router.get(
     "/",
     logController.getLogs

@@ -3,7 +3,7 @@ const logService =
 
 
 // ########################################################
-// Get All Logs
+// Get Logs
 // ########################################################
 
 async function getLogs(
@@ -17,21 +17,25 @@ async function getLogs(
             user,
             host,
             search,
-            limit,
             from,
-            to
+            to,
+            page,
+            pageSize
         } = req.query;
 
 
-        const logs =
-            await logService.getLogs({
-                user,
-                host,
-                search,
-                limit,
-                from,
-                to
-            });
+        const result =
+            await logService
+                .getPaginatedLogs({
+
+                    user,
+                    host,
+                    search,
+                    from,
+                    to,
+                    page,
+                    pageSize
+                });
 
 
         return res.status(200).json({
@@ -39,9 +43,10 @@ async function getLogs(
             success: true,
 
             count:
-                logs.length,
+                result.logs.length,
 
             filters: {
+
                 user:
                     user || null,
 
@@ -51,9 +56,6 @@ async function getLogs(
                 search:
                     search || null,
 
-                limit:
-                    limit || null,
-
                 from:
                     from || null,
 
@@ -61,8 +63,11 @@ async function getLogs(
                     to || null
             },
 
+            pagination:
+                result.pagination,
+
             data:
-                logs
+                result.logs
         });
 
 
@@ -80,6 +85,50 @@ async function getLogs(
 
             message:
                 "Unable to retrieve logs"
+        });
+    }
+}
+
+
+// ########################################################
+// Get Log Statistics
+// ########################################################
+
+async function getLogStats(
+    req,
+    res
+) {
+
+    try {
+
+        const stats =
+            await logService
+                .getLogStats();
+
+
+        return res.status(200).json({
+
+            success: true,
+
+            data:
+                stats
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Log statistics error:",
+            error
+        );
+
+
+        return res.status(500).json({
+
+            success: false,
+
+            message:
+                "Unable to retrieve log statistics"
         });
     }
 }
@@ -135,7 +184,12 @@ async function getRecentLogs(
 }
 
 
+// ########################################################
+// Exports
+// ########################################################
+
 module.exports = {
     getLogs,
-    getRecentLogs
+    getRecentLogs,
+    getLogStats
 };

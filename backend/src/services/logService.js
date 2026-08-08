@@ -1,7 +1,6 @@
 const fs = require("fs");
 const path = require("path");
 
-
 // ########################################################
 // Log Configuration
 // ########################################################
@@ -24,11 +23,9 @@ function parseLogLine(line) {
             part => part.trim()
         );
 
-
     if (parts.length < 4) {
         return null;
     }
-
 
     const timestamp =
         parts[0];
@@ -51,7 +48,6 @@ function parseLogLine(line) {
             .join(" | ")
             .trim();
 
-
     return {
         timestamp,
         user,
@@ -60,7 +56,6 @@ function parseLogLine(line) {
         raw: line
     };
 }
-
 
 
 // ########################################################
@@ -74,11 +69,9 @@ function parseLogTimestamp(timestamp) {
             /^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/
         );
 
-
     if (!match) {
         return null;
     }
-
 
     const [
         ,
@@ -90,7 +83,6 @@ function parseLogTimestamp(timestamp) {
         seconds
     ] = match;
 
-
     const date =
         new Date(
             Number(year),
@@ -101,17 +93,16 @@ function parseLogTimestamp(timestamp) {
             Number(seconds)
         );
 
-
     if (Number.isNaN(date.getTime())) {
         return null;
     }
 
-
     return date;
 }
 
+
 // ########################################################
-// Get All Logs
+// Get All / Filtered Logs
 // ########################################################
 
 async function getLogs(options = {}) {
@@ -122,22 +113,18 @@ async function getLogs(options = {}) {
             "utf8"
         );
 
-
     const lines =
         content
             .split("\n")
             .map(line => line.trim())
             .filter(Boolean);
 
-
     let logs = [];
-
 
     for (const line of lines) {
 
         const parsed =
             parseLogLine(line);
-
 
         if (parsed) {
             logs.push(parsed);
@@ -145,142 +132,134 @@ async function getLogs(options = {}) {
     }
 
 
-    
-const {
-    user,
-    host,
-    search,
-    limit,
-    from,
-    to
-} = options;
-
-// Date range filter
-
-if (from) {
-
-    const fromDate =
-        parseLogTimestamp(
-            `${from} 00:00:00`
-        );
-
-
-    if (fromDate) {
-
-        logs =
-            logs.filter(log => {
-
-                const logDate =
-                    parseLogTimestamp(
-                        log.timestamp
-                    );
-
-
-                return (
-                    logDate &&
-                    logDate >= fromDate
-                );
-            });
-    }
-}
-
-
-if (to) {
-
-    const toDate =
-        parseLogTimestamp(
-            `${to} 23:59:59`
-        );
-
-
-    if (toDate) {
-
-        logs =
-            logs.filter(log => {
-
-                const logDate =
-                    parseLogTimestamp(
-                        log.timestamp
-                    );
-
-
-                return (
-                    logDate &&
-                    logDate <= toDate
-                );
-            });
-    }
-}
-
+    const {
+        user,
+        host,
+        search,
+        limit,
+        from,
+        to
+    } = options;
 
 
     // User filter
-    if (options.user) {
+    if (user) {
 
-        const user =
-            String(options.user)
-                .toLowerCase();
+        const userValue =
+            String(user).toLowerCase();
 
         logs =
             logs.filter(log =>
                 log.user
                     .toLowerCase()
-                    === user
+                    === userValue
             );
     }
 
 
     // Host filter
-    if (options.host) {
+    if (host) {
 
-        const host =
-            String(options.host)
-                .toLowerCase();
+        const hostValue =
+            String(host).toLowerCase();
 
         logs =
             logs.filter(log =>
                 log.host
                     .toLowerCase()
-                    === host
+                    === hostValue
             );
     }
 
 
-    // Message / general search
-    if (options.search) {
+    // Search filter
+    if (search) {
 
-        const search =
-            String(options.search)
-                .toLowerCase();
+        const searchValue =
+            String(search).toLowerCase();
 
         logs =
             logs.filter(log =>
                 log.message
                     .toLowerCase()
-                    .includes(search)
+                    .includes(searchValue)
                 ||
                 log.raw
                     .toLowerCase()
-                    .includes(search)
+                    .includes(searchValue)
             );
     }
 
 
-    // Limit
-    if (options.limit !== undefined) {
+    // From date
+    if (from) {
 
-        const limit =
+        const fromDate =
+            parseLogTimestamp(
+                `${from} 00:00:00`
+            );
+
+        if (fromDate) {
+
+            logs =
+                logs.filter(log => {
+
+                    const logDate =
+                        parseLogTimestamp(
+                            log.timestamp
+                        );
+
+                    return (
+                        logDate &&
+                        logDate >= fromDate
+                    );
+                });
+        }
+    }
+
+
+    // To date
+    if (to) {
+
+        const toDate =
+            parseLogTimestamp(
+                `${to} 23:59:59`
+            );
+
+        if (toDate) {
+
+            logs =
+                logs.filter(log => {
+
+                    const logDate =
+                        parseLogTimestamp(
+                            log.timestamp
+                        );
+
+                    return (
+                        logDate &&
+                        logDate <= toDate
+                    );
+                });
+        }
+    }
+
+
+    // Limit - backward compatibility
+    if (limit !== undefined) {
+
+        const safeLimit =
             Math.max(
                 1,
                 Math.min(
-                    Number(options.limit) || 20,
+                    Number(limit) || 20,
                     100
                 )
             );
 
-
         logs =
-            logs.slice(-limit)
+            logs
+                .slice(-safeLimit)
                 .reverse();
     }
 
@@ -290,7 +269,96 @@ if (to) {
 
 
 // ########################################################
-// Get Recent Logs
+// Paginated Logs
+// ########################################################
+
+async function getPaginatedLogs(
+    options = {}
+) {
+
+    const {
+        page = 1,
+        pageSize = 10,
+        ...filters
+    } = options;
+
+
+    const safePage =
+        Math.max(
+            1,
+            Number(page) || 1
+        );
+
+
+    const safePageSize =
+        Math.max(
+            1,
+            Math.min(
+                Number(pageSize) || 10,
+                100
+            )
+        );
+
+
+    // Get filtered logs WITHOUT limit
+    const logs =
+        await getLogs(filters);
+
+
+    const total =
+        logs.length;
+
+
+    const totalPages =
+        Math.max(
+            1,
+            Math.ceil(
+                total / safePageSize
+            )
+        );
+
+
+    const currentPage =
+        Math.min(
+            safePage,
+            totalPages
+        );
+
+
+    const start =
+        (currentPage - 1)
+        * safePageSize;
+
+
+    const paginatedLogs =
+        logs
+            .slice()
+            .reverse()
+            .slice(
+                start,
+                start + safePageSize
+            );
+
+
+    return {
+        logs: paginatedLogs,
+
+        pagination: {
+            page: currentPage,
+            pageSize: safePageSize,
+            total,
+            totalPages,
+            hasNextPage:
+                currentPage < totalPages,
+            hasPreviousPage:
+                currentPage > 1
+        }
+    };
+}
+
+
+// ########################################################
+// Recent Logs
 // ########################################################
 
 async function getRecentLogs(
@@ -303,7 +371,161 @@ async function getRecentLogs(
 }
 
 
+// ########################################################
+// Log Statistics
+// ########################################################
+
+async function getLogStats() {
+
+    const logs =
+        await getLogs();
+
+
+    const users =
+        [
+            ...new Set(
+                logs.map(
+                    log => log.user
+                )
+            )
+        ];
+
+
+    const hosts =
+        [
+            ...new Set(
+                logs.map(
+                    log => log.host
+                )
+            )
+        ];
+
+
+    const started =
+        logs.filter(log =>
+            log.message
+                .toLowerCase()
+                .includes("started")
+        ).length;
+
+
+    const closed =
+        logs.filter(log =>
+            log.message
+                .toLowerCase()
+                .includes("closed")
+        ).length;
+
+
+    const lastActivity =
+        logs.length > 0
+            ? logs[logs.length - 1]
+            : null;
+
+
+    return {
+
+        totalLogs:
+            logs.length,
+
+        uniqueUsers:
+            users.length,
+
+        users,
+
+        uniqueHosts:
+            hosts.length,
+
+        hosts,
+
+        started,
+
+        closed,
+
+        lastActivity
+    };
+}// ########################################################
+// Log Statistics
+// ########################################################
+
+async function getLogStats() {
+
+    const logs =
+        await getLogs();
+
+
+    const users =
+        [
+            ...new Set(
+                logs.map(
+                    log => log.user
+                )
+            )
+        ];
+
+
+    const hosts =
+        [
+            ...new Set(
+                logs.map(
+                    log => log.host
+                )
+            )
+        ];
+
+
+    const started =
+        logs.filter(log =>
+            log.message
+                .toLowerCase()
+                .includes("started")
+        ).length;
+
+
+    const closed =
+        logs.filter(log =>
+            log.message
+                .toLowerCase()
+                .includes("closed")
+        ).length;
+
+
+    const lastActivity =
+        logs.length > 0
+            ? logs[logs.length - 1]
+            : null;
+
+
+    return {
+
+        totalLogs:
+            logs.length,
+
+        uniqueUsers:
+            users.length,
+
+        users,
+
+        uniqueHosts:
+            hosts.length,
+
+        hosts,
+
+        started,
+
+        closed,
+
+        lastActivity
+    };
+}
+
+// ########################################################
+// Exports
+// ########################################################
+
 module.exports = {
     getLogs,
-    getRecentLogs
+    getPaginatedLogs,
+    getRecentLogs,
+     getLogStats
 };
