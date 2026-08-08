@@ -44,5 +44,12 @@ router.delete(
 );
 
 
+router.get(
+    "/history/:id/export/text",
+    reportController.exportReportAsText
+);
+
+
+
 module.exports =
     router;
