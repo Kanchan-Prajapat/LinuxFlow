@@ -397,5 +397,10 @@ async function removeAllExtendedAcl(
 
 
 module.exports = {
-    getAcl
+    getAcl,
+    setUserAcl,
+    setGroupAcl,
+    removeUserAcl,
+    removeGroupAcl,
+    removeAllExtendedAcl
 };
