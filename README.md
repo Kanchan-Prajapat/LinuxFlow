@@ -261,6 +261,44 @@ For development with automatic restart:
 npm run dev
 ```
 
+### Running the Backend
+
+Enter the backend directory:
+
+```bash
+cd backend
+```
+
+Install backend dependencies:
+
+```bash
+npm install
+```
+
+Start the LinuxFlow API:
+
+```bash
+npm start
+```
+
+The API runs by default on:
+
+```text
+http://localhost:5000
+```
+
+Example API request:
+
+```bash
+curl http://localhost:5000/api/system/info
+```
+
+For development with automatic restart:
+
+```bash
+npm run dev
+```
+
 
 ### Backend Stack
 
@@ -282,6 +320,7 @@ backend/
     ├── controllers/
     └── services/
 ```
+
 
 
 
@@ -350,8 +389,30 @@ chmod +x install.sh
 ```
 
 Run the installer with administrative privileges:
+Make the installer executable:
 
 ```bash
+chmod +x install.sh
+```
+
+Run the installer with administrative privileges:
+
+```bash
+sudo ./install.sh
+```
+
+The installer automatically:
+
+- Detects the supported Linux distribution
+- Validates LinuxFlow source files
+- Validates Bash script syntax
+- Checks required system dependencies
+- Installs missing dependencies when approved
+- Installs LinuxFlow under `/opt/linuxflow`
+- Creates the global `linuxflow` command
+- Validates the completed installation
+
+After installation, start LinuxFlow using:
 sudo ./install.sh
 ```
 
@@ -370,17 +431,56 @@ After installation, start LinuxFlow using:
 
 ```bash
 sudo linuxflow
+sudo linuxflow
 ```
 
 ### Uninstallation
 
 To remove LinuxFlow:
+### Uninstallation
+
+To remove LinuxFlow:
 
 ```bash
-sudo bash LinuxFlow.sh
+sudo ./uninstall.sh
 ```
 
+The uninstaller provides options to preserve or permanently delete
+LinuxFlow runtime data such as logs, backups, and reports.
 ---
+
+
+## Screenshots
+
+### LinuxFlow CLI
+
+The LinuxFlow interactive command-line interface provides access to all
+14 system administration modules from a centralized menu.
+
+![LinuxFlow CLI](docs/screenshots/linuxflow-menu.jpeg)
+
+### LinuxFlow API
+
+The REST API provides programmatic access to LinuxFlow system-management
+functionality.
+
+![LinuxFlow API](docs/screenshots/linuxflow-api.jpeg)
+
+### Installation
+
+LinuxFlow provides an automated installation process with dependency,
+source, and syntax validation.
+
+![LinuxFlow Installation](docs/screenshots/linuxflow-install.jpeg)
+
+### Uninstallation
+
+The uninstaller validates complete removal of the LinuxFlow installation
+and global command.
+
+![LinuxFlow Uninstallation](docs/screenshots/linuxflow-uninstall.jpeg)
+
+
 
 ## Main Menu
 
@@ -687,6 +787,21 @@ Validation includes:
 - Runtime data handling during uninstallation
 - Fresh reinstallation after uninstallation
 
+### Installation Testing
+
+The LinuxFlow installation lifecycle has been tested on a RHEL-based
+virtual machine.
+
+Validation includes:
+
+- Fresh installation using `install.sh`
+- Global `linuxflow` command verification
+- CLI startup verification
+- Complete uninstallation using `uninstall.sh`
+- Installation cleanup validation
+- Runtime data handling during uninstallation
+- Fresh reinstallation after uninstallation
+
 ### Backend Validation
 
 The LinuxFlow API backend has also been validated through multiple levels
@@ -705,9 +820,15 @@ Validation includes:
 - Dependency security audit
 
 The latest backend dependency audit reported:
+The latest backend dependency audit reported:
 
 ```text
+```text
 0 vulnerabilities
+```
+
+This result reflects the dependency state at the time of the latest
+validation.
 ```
 
 This result reflects the dependency state at the time of the latest
@@ -833,3 +954,4 @@ non-production environment first.
 
 The author is not responsible for data loss, service interruption, or
 system misconfiguration caused by improper use.
+
