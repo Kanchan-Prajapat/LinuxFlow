@@ -10,13 +10,20 @@
 
 ## Overview
 
-**LinuxFlow** is a modular Bash-based Linux server administration and
-automation suite designed to simplify common system administration tasks
-through a centralized command-line interface.
+**LinuxFlow** is a modular Linux server administration, automation,
+monitoring, and management suite designed to simplify common system
+administration tasks through a centralized command-line interface and
+REST API backend.
 
-It combines user administration, storage management, security,
-monitoring, automation, backup, and reporting utilities into a single
-interactive tool.
+It combines user administration, group management, permissions, ACLs,
+storage management, security, monitoring, automation, backup, SSH
+management, and reporting into a single integrated platform.
+
+LinuxFlow provides two complementary interfaces:
+
+- **LinuxFlow CLI** — Interactive Bash-based administration interface
+- **LinuxFlow API** — Node.js/Express REST API for programmatic system
+  management and integration
 
 LinuxFlow focuses not only on automation but also on **safe system
 administration** by incorporating input validation, confirmation prompts,
@@ -24,6 +31,35 @@ configuration backups, rollback mechanisms, critical resource protection,
 and activity logging.
 
 ---
+
+## Architecture
+
+LinuxFlow follows a modular architecture where administrative operations
+are separated into independent layers.
+
+```text
+                        LinuxFlow
+                            |
+              +-------------+-------------+
+              |                           |
+          CLI Layer                   API Layer
+         Bash Scripts             Node.js / Express
+              |                           |
+           Modules                     Routes
+              |                           |
+              |                      Controllers
+              |                           |
+              |                       Services
+              |                           |
+              +-------------+-------------+
+                            |
+                       Linux System
+                            |
+              systemd / firewalld / SSH
+              ACL / LVM / Swap / Cron
+              Users / Groups / Processes
+
+```
 
 ## Features
 
@@ -128,12 +164,26 @@ Rollback support is implemented in areas such as:
 
 ## Project Structure
 
+---
+
 ```text
 LinuxFlow/
 │
 ├── LinuxFlow.sh
+├── install.sh
+├── uninstall.sh
 ├── README.md
 ├── LICENSE
+├── .gitignore
+│
+├── backend/
+│   ├── package.json
+│   ├── package-lock.json
+│   └── src/
+│       ├── app.js
+│       ├── controllers/
+│       ├── routes/
+│       └── services/
 │
 ├── config/
 │   └── linuxflow.conf
@@ -167,6 +217,40 @@ LinuxFlow/
 ```
 
 ---
+
+
+
+---
+
+
+## Backend API
+
+LinuxFlow includes a Node.js and Express-based REST API backend.
+
+The backend provides programmatic access to LinuxFlow functionality through
+dedicated route, controller, and service layers.
+
+### Backend Stack
+
+- Node.js
+- Express.js
+- CORS
+- dotenv
+- Nodemon for development
+
+### Backend Directory
+
+```text
+backend/
+├── package.json
+├── package-lock.json
+└── src/
+    ├── app.js
+    ├── routes/
+    ├── controllers/
+    └── services/
+```
+
 
 ## Requirements
 
@@ -534,7 +618,28 @@ THEME=dark
 
 ## Validation and Testing
 
-LinuxFlow has been tested at multiple levels.
+---
+
+### Backend Validation
+
+The LinuxFlow API backend has also been validated through multiple levels
+of testing.
+
+Validation includes:
+
+- JavaScript syntax validation
+- Backend module loading
+- Route-to-controller audit
+- Controller-to-service audit
+- Service export validation
+- API startup validation
+- REST endpoint smoke testing
+- Functional testing of administrative modules
+- Dependency security audit
+
+The backend dependency audit currently reports:
+
+0 vulnerabilities
 
 ### Bash Syntax Validation
 
