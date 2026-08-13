@@ -252,6 +252,7 @@ backend/
 ```
 
 
+
 ## Requirements
 
 LinuxFlow is designed for Linux systems and has been developed and tested
@@ -310,24 +311,45 @@ Enter the project directory:
 cd LinuxFlow
 ```
 
-Make the main script executable:
+Make the installer executable:
 
 ```bash
-chmod +x LinuxFlow.sh
+chmod +x install.sh
 ```
 
-Run LinuxFlow with administrative privileges:
+Run the installer with administrative privileges:
 
 ```bash
-sudo ./LinuxFlow.sh
+sudo ./install.sh
 ```
 
-Alternatively:
+The installer automatically:
+
+- Detects the supported Linux distribution
+- Validates LinuxFlow source files
+- Validates Bash script syntax
+- Checks required system dependencies
+- Installs missing dependencies when approved
+- Installs LinuxFlow under `/opt/linuxflow`
+- Creates the global `linuxflow` command
+- Validates the completed installation
+
+After installation, start LinuxFlow using:
 
 ```bash
-sudo bash LinuxFlow.sh
+sudo linuxflow
 ```
 
+### Uninstallation
+
+To remove LinuxFlow:
+
+```bash
+sudo ./uninstall.sh
+```
+
+The uninstaller provides options to preserve or permanently delete
+LinuxFlow runtime data such as logs, backups, and reports.
 ---
 
 ## Main Menu
