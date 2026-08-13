@@ -261,45 +261,6 @@ For development with automatic restart:
 npm run dev
 ```
 
-### Running the Backend
-
-Enter the backend directory:
-
-```bash
-cd backend
-```
-
-Install backend dependencies:
-
-```bash
-npm install
-```
-
-Start the LinuxFlow API:
-
-```bash
-npm start
-```
-
-The API runs by default on:
-
-```text
-http://localhost:5000
-```
-
-Example API request:
-
-```bash
-curl http://localhost:5000/api/system/info
-```
-
-For development with automatic restart:
-
-```bash
-npm run dev
-```
-
-
 ### Backend Stack
 
 - Node.js
