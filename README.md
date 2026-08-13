@@ -350,13 +350,6 @@ chmod +x install.sh
 ```
 
 Run the installer with administrative privileges:
-Make the installer executable:
-
-```bash
-chmod +x install.sh
-```
-
-Run the installer with administrative privileges:
 
 ```bash
 sudo ./install.sh
@@ -373,31 +366,14 @@ The installer automatically:
 - Creates the global `linuxflow` command
 - Validates the completed installation
 
-After installation, start LinuxFlow using:
-sudo ./install.sh
-```
 
-The installer automatically:
-
-- Detects the supported Linux distribution
-- Validates LinuxFlow source files
-- Validates Bash script syntax
-- Checks required system dependencies
-- Installs missing dependencies when approved
-- Installs LinuxFlow under `/opt/linuxflow`
-- Creates the global `linuxflow` command
-- Validates the completed installation
 
 After installation, start LinuxFlow using:
 
 ```bash
 sudo linuxflow
-sudo linuxflow
+
 ```
-
-### Uninstallation
-
-To remove LinuxFlow:
 ### Uninstallation
 
 To remove LinuxFlow:
@@ -748,20 +724,6 @@ Validation includes:
 - Runtime data handling during uninstallation
 - Fresh reinstallation after uninstallation
 
-### Installation Testing
-
-The LinuxFlow installation lifecycle has been tested on a RHEL-based
-virtual machine.
-
-Validation includes:
-
-- Fresh installation using `install.sh`
-- Global `linuxflow` command verification
-- CLI startup verification
-- Complete uninstallation using `uninstall.sh`
-- Installation cleanup validation
-- Runtime data handling during uninstallation
-- Fresh reinstallation after uninstallation
 
 ### Backend Validation
 
@@ -781,19 +743,15 @@ Validation includes:
 - Dependency security audit
 
 The latest backend dependency audit reported:
-The latest backend dependency audit reported:
 
-```text
+
 ```text
 0 vulnerabilities
 ```
 
 This result reflects the dependency state at the time of the latest
 validation.
-```
 
-This result reflects the dependency state at the time of the latest
-validation.
 
 ### Bash Syntax Validation
 
