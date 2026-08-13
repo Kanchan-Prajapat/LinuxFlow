@@ -377,45 +377,10 @@ sudo linuxflow
 To remove LinuxFlow:
 
 ```bash
-sudo ./uninstall.sh
+sudo bash LinuxFlow.sh
 ```
 
-The uninstaller provides options to preserve or permanently delete
-LinuxFlow runtime data such as logs, backups, and reports.
 ---
-
-
-## Screenshots
-
-### LinuxFlow CLI
-
-The LinuxFlow interactive command-line interface provides access to all
-14 system administration modules from a centralized menu.
-
-![LinuxFlow CLI](docs/screenshots/linuxflow-menu.jpeg)
-
-### LinuxFlow API
-
-The REST API provides programmatic access to LinuxFlow system-management
-functionality.
-
-![LinuxFlow API](docs/screenshots/linuxflow-api.jpeg)
-
-### Installation
-
-LinuxFlow provides an automated installation process with dependency,
-source, and syntax validation.
-
-![LinuxFlow Installation](docs/screenshots/linuxflow-install.jpeg)
-
-### Uninstallation
-
-The uninstaller validates complete removal of the LinuxFlow installation
-and global command.
-
-![LinuxFlow Uninstallation](docs/screenshots/linuxflow-uninstall.jpeg)
-
-
 
 ## Main Menu
 
